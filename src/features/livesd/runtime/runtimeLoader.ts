@@ -1,5 +1,12 @@
+const SPINE_36_RUNTIME_ROOT_URL =
+  `${import.meta.env.BASE_URL}vendor/estertion-spine-3.6`
+
 export const SPINE_36_RUNTIME_URL =
-  '/vendor/estertion-spine-3.6/spine-webgl.js'
+  `${SPINE_36_RUNTIME_ROOT_URL}/spine-webgl.js`
+export const SPINE_36_RUNTIME_LICENSE_URL =
+  `${SPINE_36_RUNTIME_ROOT_URL}/LICENSE`
+export const SPINE_36_RUNTIME_NOTICES_URL =
+  `${SPINE_36_RUNTIME_ROOT_URL}/THIRD_PARTY_NOTICES.md`
 
 export type Spine36Runtime = typeof spine
 

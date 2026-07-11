@@ -29,6 +29,10 @@ import {
   toPrskPreviewUiNotice,
 } from './features/livesd/prsk'
 import type { LiveSDAtlasBundle } from './features/livesd/model'
+import {
+  SPINE_36_RUNTIME_LICENSE_URL,
+  SPINE_36_RUNTIME_NOTICES_URL,
+} from './features/livesd/runtime/runtimeLoader'
 import { toPreviewUiNotice } from './features/livesd/ui/previewError'
 import { createZipFile, VALID_ATLAS } from './test/zipFixtures'
 
@@ -348,12 +352,12 @@ describe('App', () => {
     expect(screen.queryByText(/best_effort|experimental|verified/)).not.toBeInTheDocument()
     expect(
       screen.getByRole('link', { name: 'Spine runtime license' }),
-    ).toHaveAttribute('href', '/vendor/estertion-spine-3.6/LICENSE')
+    ).toHaveAttribute('href', SPINE_36_RUNTIME_LICENSE_URL)
     expect(
       screen.getByRole('link', { name: 'Third-party notices' }),
     ).toHaveAttribute(
       'href',
-      '/vendor/estertion-spine-3.6/THIRD_PARTY_NOTICES.md',
+      SPINE_36_RUNTIME_NOTICES_URL,
     )
   })
 

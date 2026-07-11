@@ -63,6 +63,10 @@ import {
   type LiveSDFramingOffset,
 } from '../rendering/framingOffset'
 import { normalizeLiveSDLookTarget } from '../rendering/lookTarget'
+import {
+  SPINE_36_RUNTIME_LICENSE_URL,
+  SPINE_36_RUNTIME_NOTICES_URL,
+} from '../runtime/runtimeLoader'
 import { CodexPetBuilder } from '../../codex-pet/CodexPetBuilder'
 import { CodexPetStateShortcuts } from '../../codex-pet/CodexPetStateShortcuts'
 import {
@@ -1330,14 +1334,14 @@ export function PrskIntegration() {
         </p>
         <nav aria-label={t('prsk.runtimeNotices')}>
           <a
-            href="/vendor/estertion-spine-3.6/LICENSE"
+            href={SPINE_36_RUNTIME_LICENSE_URL}
             rel="noreferrer"
             target="_blank"
           >
             Spine runtime license
           </a>
           <a
-            href="/vendor/estertion-spine-3.6/THIRD_PARTY_NOTICES.md"
+            href={SPINE_36_RUNTIME_NOTICES_URL}
             rel="noreferrer"
             target="_blank"
           >

@@ -63,6 +63,27 @@ const bundledText = (
   )
 ).join('\n')
 
+const configuredBasePath = process.env.DEPLOY_BASE_PATH?.trim()
+if (configuredBasePath) {
+  const basePath = configuredBasePath.endsWith('/')
+    ? configuredBasePath
+    : `${configuredBasePath}/`
+  const indexHtml = await readFile(resolve(distRoot, 'index.html'), 'utf8')
+  const runtimeRootUrl =
+    `${basePath}vendor/estertion-spine-3.6`
+
+  if (!indexHtml.includes(`${basePath}assets/`)) {
+    throw new Error(
+      `Production index does not use the configured base path: ${basePath}`,
+    )
+  }
+  if (!bundledText.includes(runtimeRootUrl)) {
+    throw new Error(
+      `Production runtime URL does not use the configured base path: ${runtimeRootUrl}`,
+    )
+  }
+}
+
 const forbiddenEmbeddedValues = [
   {
     label: 'fixed PRSK character ID',

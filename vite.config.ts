@@ -25,12 +25,30 @@ function parseAllowedHosts(value: string | undefined): string[] {
     })
 }
 
+function parseDeployBasePath(value: string | undefined): string {
+  const basePath = value?.trim() || '/'
+
+  if (
+    !basePath.startsWith('/') ||
+    basePath.includes('?') ||
+    basePath.includes('#') ||
+    basePath.includes('\\')
+  ) {
+    throw new Error(
+      'DEPLOY_BASE_PATH must be an absolute URL path without query, fragment, or backslash.',
+    )
+  }
+
+  return basePath.endsWith('/') ? basePath : `${basePath}/`
+}
+
 export default defineConfig(({ command, mode }) => {
-  const allowedHosts = parseAllowedHosts(
-    loadEnv(mode, repositoryRoot, '').DEV_ALLOWED_HOSTS,
-  )
+  const environment = loadEnv(mode, repositoryRoot, '')
+  const allowedHosts = parseAllowedHosts(environment.DEV_ALLOWED_HOSTS)
+  const base = parseDeployBasePath(environment.DEPLOY_BASE_PATH)
 
   return {
+    base,
     plugins: [
       react(),
       localResourcePlugin(repositoryRoot),

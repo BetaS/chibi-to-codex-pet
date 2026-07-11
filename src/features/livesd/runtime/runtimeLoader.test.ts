@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   LiveSD36RuntimeLoader,
+  SPINE_36_RUNTIME_LICENSE_URL,
+  SPINE_36_RUNTIME_NOTICES_URL,
   SPINE_36_RUNTIME_URL,
   type Spine36Runtime,
 } from './runtimeLoader'
@@ -32,6 +34,17 @@ afterEach(() => {
 })
 
 describe('LiveSD36RuntimeLoader', () => {
+  it('Vite base path 아래의 runtime과 고지 URL을 제공한다', () => {
+    const runtimeRoot =
+      `${import.meta.env.BASE_URL}vendor/estertion-spine-3.6`
+
+    expect(SPINE_36_RUNTIME_URL).toBe(`${runtimeRoot}/spine-webgl.js`)
+    expect(SPINE_36_RUNTIME_LICENSE_URL).toBe(`${runtimeRoot}/LICENSE`)
+    expect(SPINE_36_RUNTIME_NOTICES_URL).toBe(
+      `${runtimeRoot}/THIRD_PARTY_NOTICES.md`,
+    )
+  })
+
   it('필수 API shape을 가진 기존 global을 script 없이 재사용한다', async () => {
     const runtime = createRuntime()
     window.spine = runtime
