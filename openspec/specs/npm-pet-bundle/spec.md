@@ -8,7 +8,7 @@
 
 ### Requirement: publish 가능한 CLI package 경계
 
-프로젝트는 `packages/cli`에서 public `chibi-to-codex-pet` npm package를 제공해야 한다(MUST). Package는 ESM `chibi-to-codex-pet` bin, Node.js `>=22.12.0` engine과 `dist`, `renderer`, package metadata·문서·license로 구성된 files allowlist를 가져야 한다(MUST). Web root는 private application workspace이며 local package spec은 registry와 독립된 개발 검증에 사용할 수 있어야 한다(MUST).
+프로젝트는 `packages/cli`에서 public `chibi-to-codex-pet` npm package를 제공해야 한다(MUST). Package는 ESM `chibi-to-codex-pet` bin, Node.js `>=22.13.0` engine과 `dist`, `renderer`, package metadata·문서·license로 구성된 files allowlist를 가져야 한다(MUST). Web root는 private application workspace이며 local package spec은 registry와 독립된 개발 검증에 사용할 수 있어야 한다(MUST).
 
 #### Scenario: 실제 npm tarball 생성
 - **WHEN** release check가 CLI workspace에서 actual `npm pack`을 실행한다

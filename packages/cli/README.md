@@ -4,7 +4,7 @@
 
 ## 요구 사항
 
-- Node.js `22.12.0` 이상
+- Node.js `22.13.0` 이상
 - Chromium 또는 Chrome
 - Recipe가 참조하는 HTTPS provider에 대한 network 접근
 

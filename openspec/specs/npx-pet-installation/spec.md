@@ -8,7 +8,7 @@
 
 ### Requirement: recipe-first npx CLI surface
 
-시스템은 Node.js `>=22.12.0`에서 실행되는 public `chibi-to-codex-pet` package와 같은 이름의 bin을 제공해야 한다(MUST). 사용자에게 제공하는 설치 명령은 `npx -y chibi-to-codex-pet install --recipe <recipe>` 한 형태여야 하며(MUST), repo-local package spec은 개발 검증에서만 사용해야 한다(MUST). `<recipe>`는 base64url JSON, raw JSON 또는 HTTPS recipe URL로 해석할 수 있어야 하며(MUST), CLI는 `--help`, `--version`, `--codex-home`, `--dry-run`, `--force`를 비대화형으로 처리해야 한다(MUST).
+시스템은 Node.js `>=22.13.0`에서 실행되는 public `chibi-to-codex-pet` package와 같은 이름의 bin을 제공해야 한다(MUST). 사용자에게 제공하는 설치 명령은 `npx -y chibi-to-codex-pet install --recipe <recipe>` 한 형태여야 하며(MUST), repo-local package spec은 개발 검증에서만 사용해야 한다(MUST). `<recipe>`는 base64url JSON, raw JSON 또는 HTTPS recipe URL로 해석할 수 있어야 하며(MUST), CLI는 `--help`, `--version`, `--codex-home`, `--dry-run`, `--force`를 비대화형으로 처리해야 한다(MUST).
 
 #### Scenario: npx recipe 설치 명령 실행
 - **WHEN** 사용자가 `npx -y chibi-to-codex-pet install --recipe <recipe>`를 실행한다
