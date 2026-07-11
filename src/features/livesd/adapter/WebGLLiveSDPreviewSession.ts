@@ -1,3 +1,9 @@
+import type { CodexPetAnimationMappings } from '../../codex-pet/animationMapping'
+import {
+  CODEX_PET_CELL_HEIGHT,
+  CODEX_PET_CELL_WIDTH,
+  CODEX_PET_STATES,
+} from '../../codex-pet/contract'
 import { LiveSDPreviewError } from './errors'
 import type {
   LiveSDSkeletonCompatibility,
@@ -5,11 +11,18 @@ import type {
 } from './types'
 import type { LoadedAtlasImage } from './atlasImageLoader'
 import {
+  calculateLiveSDFinalProjection,
   convertLiveSDAlphaPixelBoundsToWorld,
   findLiveSDAlphaPixelBounds,
+  LIVE_SD_FRAME_INSET_PIXELS,
+  mergeLiveSDWorldBounds,
   type LiveSDProjection,
   type LiveSDWorldBounds,
 } from '../rendering/alphaBounds'
+import {
+  calculateLiveSDCanonicalCoarseProjection,
+  LIVE_SD_CANONICAL_BOUNDS_PADDING_RATIO,
+} from '../rendering/canonicalProjection'
 import {
   assertLiveSDFramingScale,
   LIVE_SD_FRAMING_SCALE_DEFAULT,
@@ -22,6 +35,7 @@ import {
   type LiveSDFramingOffset,
 } from '../rendering/framingOffset'
 import { prepareLiveSD2DWebGLState } from '../rendering/prepareLiveSD2DWebGLState'
+import type { Spine36Runtime } from '../runtime/runtimeLoader'
 import {
   calculateLiveSDLookWorldDeltaFromTarget,
   convertLiveSDWorldDeltaToLocal,
@@ -45,8 +59,8 @@ export const browserAnimationFrameScheduler: AnimationFrameScheduler = {
 }
 
 export interface WebGLLiveSDPreviewSessionOptions {
+  readonly animationData: readonly spine.Animation[]
   readonly animationState: spine.AnimationState
-  readonly animations: readonly string[]
   readonly atlas: spine.TextureAtlas
   readonly batcher: spine.webgl.PolygonBatcher
   readonly bounds: {
@@ -59,10 +73,17 @@ export interface WebGLLiveSDPreviewSessionOptions {
   readonly images: readonly LoadedAtlasImage[]
   readonly matrix: spine.webgl.Matrix4
   readonly renderer: spine.webgl.SkeletonRenderer
+  readonly runtime: Spine36Runtime
   readonly scheduler?: AnimationFrameScheduler
   readonly shader: spine.webgl.Shader
   readonly skeleton: spine.Skeleton
   readonly version: string
+}
+
+interface LiveSDCanonicalPoseSample {
+  readonly animation: spine.Animation
+  readonly animationDuration: number
+  readonly sampleTime: number
 }
 
 function worldBoundsFromVectors(
@@ -143,6 +164,7 @@ export class WebGLLiveSDPreviewSession implements LiveSDPreviewSession {
   readonly version: string
 
   readonly #animationState: spine.AnimationState
+  readonly #animationByName: ReadonlyMap<string, spine.Animation>
   readonly #atlas: spine.TextureAtlas
   readonly #batcher: spine.webgl.PolygonBatcher
   readonly #bounds: WebGLLiveSDPreviewSessionOptions['bounds']
@@ -151,11 +173,14 @@ export class WebGLLiveSDPreviewSession implements LiveSDPreviewSession {
   readonly #images: readonly LoadedAtlasImage[]
   readonly #matrix: spine.webgl.Matrix4
   readonly #renderer: spine.webgl.SkeletonRenderer
+  readonly #runtime: Spine36Runtime
   readonly #scheduler: AnimationFrameScheduler
   readonly #shader: spine.webgl.Shader
   readonly #skeleton: spine.Skeleton
 
   #currentAnimation: string
+  #canonicalMappingsSignature: string | null = null
+  #hasCanonicalFraming = false
   #cssHeight = 1
   #cssWidth = 1
   #disposed = false
@@ -174,10 +199,15 @@ export class WebGLLiveSDPreviewSession implements LiveSDPreviewSession {
   #viewBounds: LiveSDWorldBounds
 
   constructor(options: WebGLLiveSDPreviewSessionOptions) {
-    this.animations = Object.freeze([...options.animations])
+    this.animations = Object.freeze(
+      options.animationData.map((animation) => animation.name),
+    )
     this.compatibility = options.compatibility
     this.version = options.version
     this.#animationState = options.animationState
+    this.#animationByName = new Map(
+      options.animationData.map((animation) => [animation.name, animation]),
+    )
     this.#atlas = options.atlas
     this.#batcher = options.batcher
     this.#bounds = options.bounds
@@ -186,6 +216,7 @@ export class WebGLLiveSDPreviewSession implements LiveSDPreviewSession {
     this.#images = options.images
     this.#matrix = options.matrix
     this.#renderer = options.renderer
+    this.#runtime = options.runtime
     this.#scheduler = options.scheduler ?? browserAnimationFrameScheduler
     this.#shader = options.shader
     this.#skeleton = options.skeleton
@@ -274,7 +305,11 @@ export class WebGLLiveSDPreviewSession implements LiveSDPreviewSession {
 
     if (this.#started) {
       try {
-        this.#calibrateAndDrawCurrentPose()
+        if (this.#hasCanonicalFraming) {
+          this.#drawTrackedPoseWithCurrentFraming()
+        } else {
+          this.#calibrateAndDrawCurrentPose()
+        }
       } catch (error) {
         throw new LiveSDPreviewError(
           'PREVIEW_RENDER_FAILED',
@@ -310,6 +345,43 @@ export class WebGLLiveSDPreviewSession implements LiveSDPreviewSession {
 
     if (this.#started && this.#lookTarget) {
       this.#drawFrame(0)
+    }
+  }
+
+  setAnimationMappings(mappings: Readonly<CodexPetAnimationMappings>): void {
+    if (this.#disposed) {
+      return
+    }
+
+    const signature = JSON.stringify(
+      CODEX_PET_STATES.map(({ id }) => mappings[id]?.animationName ?? null),
+    )
+    if (
+      this.#hasCanonicalFraming &&
+      signature === this.#canonicalMappingsSignature
+    ) {
+      return
+    }
+
+    const previousBounds = this.#viewBounds
+    const previousCanonicalFraming = this.#hasCanonicalFraming
+    const previousSignature = this.#canonicalMappingsSignature
+    try {
+      const canonicalBounds = this.#measureCanonicalBounds(mappings)
+      this.#hasCanonicalFraming = true
+      this.#canonicalMappingsSignature = signature
+      this.#viewBounds = canonicalBounds
+      this.#drawTrackedPoseWithCurrentFraming()
+    } catch (error) {
+      this.#hasCanonicalFraming = previousCanonicalFraming
+      this.#canonicalMappingsSignature = previousSignature
+      this.#viewBounds = previousBounds
+      this.#safely(() => this.#drawTrackedPoseWithCurrentFraming())
+      throw new LiveSDPreviewError(
+        'PREVIEW_RENDER_FAILED',
+        'Codex Pet과 같은 공통 framing으로 LiveSD 미리보기를 보정하지 못했습니다.',
+        { cause: error },
+      )
     }
   }
 
@@ -593,6 +665,165 @@ export class WebGLLiveSDPreviewSession implements LiveSDPreviewSession {
     }
   }
 
+  #createCanonicalPoseSamples(
+    mappings: Readonly<CodexPetAnimationMappings>,
+  ): readonly LiveSDCanonicalPoseSample[] {
+    const samples: LiveSDCanonicalPoseSample[] = []
+    for (const state of CODEX_PET_STATES) {
+      const mapping = mappings[state.id]
+      const animation = this.#animationByName.get(mapping?.animationName ?? '')
+      const duration = animation?.duration
+      if (
+        !mapping ||
+        !animation ||
+        duration === undefined ||
+        !Number.isFinite(duration) ||
+        duration < 0
+      ) {
+        throw new Error(
+          `${state.id} 상태의 canonical preview animation을 찾을 수 없습니다.`,
+        )
+      }
+
+      for (let frameIndex = 0; frameIndex < state.frameCount; frameIndex += 1) {
+        samples.push({
+          animation,
+          animationDuration: duration,
+          sampleTime: (duration * frameIndex) / state.frameCount,
+        })
+      }
+    }
+    return samples
+  }
+
+  #applyCanonicalPose(sample: LiveSDCanonicalPoseSample): void {
+    this.#skeleton.setToSetupPose()
+    this.#skeleton.time = sample.sampleTime
+    sample.animation.apply(
+      this.#skeleton,
+      0,
+      sample.sampleTime,
+      sample.animationDuration > 0,
+      [],
+      1,
+      this.#runtime.MixPose.setup,
+      this.#runtime.MixDirection.in,
+    )
+    this.#skeleton.updateWorldTransform()
+  }
+
+  #measureCanonicalBounds(
+    mappings: Readonly<CodexPetAnimationMappings>,
+  ): LiveSDWorldBounds {
+    this.#removeAppliedLookOffset()
+    const samples = this.#createCanonicalPoseSamples(mappings)
+    let rawBounds: LiveSDWorldBounds | null = null
+    for (const sample of samples) {
+      this.#applyCanonicalPose(sample)
+      this.#skeleton.getBounds(this.#bounds.offset, this.#bounds.size, [])
+      rawBounds = mergeLiveSDWorldBounds(
+        rawBounds,
+        worldBoundsFromVectors(this.#bounds),
+      )
+    }
+    if (!rawBounds) {
+      throw new Error('Canonical LiveSD preview에 사용할 pose가 없습니다.')
+    }
+
+    const coarseProjection = calculateLiveSDCanonicalCoarseProjection(
+      rawBounds,
+      CODEX_PET_CELL_WIDTH,
+      CODEX_PET_CELL_HEIGHT,
+      LIVE_SD_CANONICAL_BOUNDS_PADDING_RATIO,
+    )
+    const previousWidth = this.#canvas.width
+    const previousHeight = this.#canvas.height
+    if (previousWidth < CODEX_PET_CELL_WIDTH) {
+      this.#canvas.width = CODEX_PET_CELL_WIDTH
+    }
+    if (previousHeight < CODEX_PET_CELL_HEIGHT) {
+      this.#canvas.height = CODEX_PET_CELL_HEIGHT
+    }
+
+    let visibleBounds: LiveSDWorldBounds | null = null
+    try {
+      this.#projection = coarseProjection
+      this.#matrix.ortho2d(
+        coarseProjection.x,
+        coarseProjection.y,
+        coarseProjection.width,
+        coarseProjection.height,
+      )
+      this.#gl.viewport(
+        0,
+        0,
+        CODEX_PET_CELL_WIDTH,
+        CODEX_PET_CELL_HEIGHT,
+      )
+
+      const bottomUpRgba = new Uint8Array(
+        CODEX_PET_CELL_WIDTH * CODEX_PET_CELL_HEIGHT * 4,
+      )
+      for (const sample of samples) {
+        this.#applyCanonicalPose(sample)
+        this.#drawAppliedPose()
+        bottomUpRgba.fill(0)
+        this.#gl.readPixels(
+          0,
+          0,
+          CODEX_PET_CELL_WIDTH,
+          CODEX_PET_CELL_HEIGHT,
+          this.#gl.RGBA,
+          this.#gl.UNSIGNED_BYTE,
+          bottomUpRgba,
+        )
+        const alphaBounds = findLiveSDAlphaPixelBounds(
+          flipPreviewRgbaRows(
+            bottomUpRgba,
+            CODEX_PET_CELL_WIDTH,
+            CODEX_PET_CELL_HEIGHT,
+          ),
+          CODEX_PET_CELL_WIDTH,
+          CODEX_PET_CELL_HEIGHT,
+        )
+        if (!alphaBounds) {
+          throw new Error('Canonical LiveSD preview pose가 완전히 투명합니다.')
+        }
+        visibleBounds = mergeLiveSDWorldBounds(
+          visibleBounds,
+          convertLiveSDAlphaPixelBoundsToWorld(
+            alphaBounds,
+            coarseProjection,
+            CODEX_PET_CELL_WIDTH,
+            CODEX_PET_CELL_HEIGHT,
+          ),
+        )
+      }
+    } finally {
+      if (this.#canvas.width !== previousWidth) {
+        this.#canvas.width = previousWidth
+      }
+      if (this.#canvas.height !== previousHeight) {
+        this.#canvas.height = previousHeight
+      }
+      this.#gl.viewport(0, 0, previousWidth, previousHeight)
+    }
+
+    if (!visibleBounds) {
+      throw new Error('Canonical LiveSD preview의 alpha bounds가 없습니다.')
+    }
+    return visibleBounds
+  }
+
+  #drawTrackedPoseWithCurrentFraming(): void {
+    this.#removeAppliedLookOffset()
+    this.#skeleton.setToSetupPose()
+    this.#applyFrame(0, false)
+    this.#setProjectionForBounds(this.#viewBounds)
+    this.#applyLookTargetToCurrentPose()
+    this.#drawAppliedPose()
+  }
+
   #calibrateAndDrawCurrentPose(): void {
     this.#applyFrame(0, false)
     this.#skeleton.getBounds(this.#bounds.offset, this.#bounds.size, [])
@@ -649,14 +880,24 @@ export class WebGLLiveSDPreviewSession implements LiveSDPreviewSession {
     framingOffset = this.#framingOffset,
   ): void {
     this.#viewBounds = bounds
-    this.#projection = calculatePreviewProjection(
-      bounds,
-      this.#cssWidth,
-      this.#cssHeight,
-      framingScale,
-      framingOffset,
-      mirrorX,
-    )
+    this.#projection = this.#hasCanonicalFraming
+      ? calculateLiveSDFinalProjection(
+          bounds,
+          CODEX_PET_CELL_WIDTH,
+          CODEX_PET_CELL_HEIGHT,
+          LIVE_SD_FRAME_INSET_PIXELS,
+          framingScale,
+          framingOffset,
+          mirrorX,
+        )
+      : calculatePreviewProjection(
+          bounds,
+          this.#cssWidth,
+          this.#cssHeight,
+          framingScale,
+          framingOffset,
+          mirrorX,
+        )
     this.#matrix.ortho2d(
       mirrorX
         ? this.#projection.x + this.#projection.width

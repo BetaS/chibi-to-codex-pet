@@ -15,6 +15,10 @@ import {
   LIVE_SD_FRAMING_SCALE_MAX,
   LIVE_SD_FRAMING_SCALE_MIN,
 } from '../livesd/rendering/framingScale'
+import {
+  parseCodexPetRecipeSource,
+  type CodexPetRecipeSource,
+} from './recipe'
 
 export const CODEX_PET_SETTINGS_PRESET_STORAGE_KEY =
   'chibi-to-codex-pet.pet-presets.v1'
@@ -33,6 +37,7 @@ export interface CodexPetSettingsPreset {
   readonly globalMirrorX: boolean
   readonly lookMovementScale: number
   readonly mappings: CodexPetAnimationMappings
+  readonly source: CodexPetRecipeSource | null
   readonly updatedAt: number
 }
 
@@ -44,6 +49,7 @@ export interface CodexPetSettingsPresetInput {
   readonly globalMirrorX: boolean
   readonly lookMovementScale: number
   readonly mappings: Readonly<CodexPetAnimationMappings>
+  readonly source?: CodexPetRecipeSource | null
 }
 
 export interface CodexPetSettingsPresetCatalog {
@@ -164,6 +170,7 @@ function parsePreset(value: unknown, key: string): CodexPetSettingsPreset {
       'globalMirrorX',
       'lookMovementScale',
       'mappings',
+      'source',
       'updatedAt',
     ])
   ) {
@@ -220,6 +227,10 @@ function parsePreset(value: unknown, key: string): CodexPetSettingsPreset {
       CODEX_PET_LOOK_MOVEMENT_SCALE_MAX,
     ),
     mappings: parseMappings(value.mappings),
+    source:
+      value.source === undefined || value.source === null
+        ? null
+        : parseCodexPetRecipeSource(value.source),
     updatedAt: parseNumberInRange(
       value.updatedAt,
       0,
@@ -313,6 +324,7 @@ export function saveCodexPetSettingsPreset(
       mappings: Object.fromEntries(
         CODEX_PET_STATES.map(({ id }) => [id, { ...input.mappings[id] }]),
       ),
+      source: input.source ?? null,
       updatedAt,
     },
     displayName,

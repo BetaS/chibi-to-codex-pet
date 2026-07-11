@@ -9,9 +9,24 @@ Ready LiveSD source의 animation을 Codex Pet v2의 9개 표준 상태에 연결
 ### Requirement: 표준 Codex Pet 상태 계약
 시스템은 Codex Pet v2의 표준 상태 rows 0–8을 `idle`, `running-right`, `running-left`, `waving`, `jumping`, `failed`, `waiting`, `running`, `review` 순서로 정의하고(MUST), 각 상태의 row index, 사용 frame 수와 재생 duration을 단일 runtime 독립 계약으로 제공해야 한다(MUST). Rows 9–10은 16방향 look frame 전용이며 표준 상태 mapping의 범위는 rows 0–8이다(MUST).
 
+표준 상태 계약은 다음 값과 정확히 일치해야 한다(MUST).
+
+| ID | Row | Frame 수 | Frame duration (ms) |
+|---|---:|---:|---|
+| `idle` | 0 | 6 | `280, 110, 110, 140, 140, 320` |
+| `running-right` | 1 | 8 | `120, 120, 120, 120, 120, 120, 120, 220` |
+| `running-left` | 2 | 8 | `120, 120, 120, 120, 120, 120, 120, 220` |
+| `waving` | 3 | 4 | `140, 140, 140, 280` |
+| `jumping` | 4 | 5 | `140, 140, 140, 140, 280` |
+| `failed` | 5 | 8 | `140, 140, 140, 140, 140, 140, 140, 240` |
+| `waiting` | 6 | 6 | `150, 150, 150, 150, 150, 260` |
+| `running` | 7 | 6 | `120, 120, 120, 120, 120, 220` |
+| `review` | 8 | 6 | `150, 150, 150, 150, 150, 280` |
+
 #### Scenario: 표준 상태 계약 조회
 - **WHEN** exporter와 installed preview가 표준 상태 계약을 조회한다
-- **THEN** 두 구성 요소는 동일한 rows 0–8의 9개 row 순서, frame 수와 duration을 사용한다
+- **THEN** 두 구성 요소는 동일한 rows 0–8의 9개 row 순서와 frame 수를 사용한다
+- **AND** installed preview는 표의 duration과 별도 idle 배율 계약으로 cell 재생 시간을 계산한다
 
 #### Scenario: 표준 row의 미사용 cell 계산
 - **WHEN** frame 수가 8보다 작은 rows 0–8의 표준 상태 row를 계산한다
@@ -21,12 +36,32 @@ Ready LiveSD source의 animation을 Codex Pet v2의 9개 표준 상태에 연결
 - **WHEN** 일반 pointer가 Pet 위로 진입하고 v2 look cursor가 활성화되지 않는다
 - **THEN** renderer는 표준 `jumping` row 4를 임시로 재생하고 pointer가 나가면 이전 상태로 복귀한다
 
+#### Scenario: Installed preview의 idle 속도
+- **WHEN** installed preview가 `idle` row를 재생한다
+- **THEN** 각 cell의 표시 시간은 위 표의 해당 duration에 `6`을 곱한 값이어야 한다
+- **AND** 다른 8개 상태는 표의 duration을 그대로 사용해야 한다
+
 #### Scenario: look row 분리
 - **WHEN** v2 pointer look이 활성화된다
 - **THEN** renderer는 9개 표준 상태 mapping을 변경하지 않고 rows 9–10의 정적 look frame을 우선 표시한다
 
 ### Requirement: animation 자동 추천
-시스템은 ready 스켈레톤이 제공한 실제 animation 이름만 대상으로 정규화된 이름 token과 상태별 우선순위를 사용해 9개 상태의 초기 매핑을 결정해야 한다(MUST). 직접 의미 이름이 없으면 문서화된 emotion/action fallback을 적용하고(MUST), 후보가 없는 상태도 실제 목록 안의 안전한 fallback animation을 가져야 한다(MUST).
+시스템은 ready 스켈레톤이 제공한 실제 animation 이름만 대상으로 정규화된 이름 token과 아래의 상태별 우선순위를 사용해 9개 상태의 초기 매핑을 결정해야 한다(MUST). 이름 정규화는 NFKD, camel-case 경계 분리, `en-US` 소문자화, 영숫자가 아닌 문자의 underscore 치환과 양끝 underscore 제거 순서로 수행하고(MUST), 각 token의 끝 숫자를 제거한 별도 token도 일치 후보에 포함해야 한다(MUST).
+
+각 상태는 `전용 이름` 전체 일치, `직접 token` 그룹의 왼쪽부터, `fallback token` 그룹의 왼쪽부터 순서로 선택해야 한다(MUST).
+
+| 상태 | 전용 이름 우선순위 | 직접 token 우선순위 | Fallback token 우선순위 |
+|---|---|---|---|
+| `idle` | `w_happy_idle01_f` | `idle`, `rest`, `stand`, `breath` | `default`, `neutral` |
+| `running-right` | `w_normal_walk01_f` | `running+right`, `run+right`, `walking+right`, `walk+right`, `walk`, `run` | `move` |
+| `waving` | `w_cute_joy01_f` | `waving`, `wave`, `greeting`, `greet` | `joy`, `cheer`, `laugh` |
+| `jumping` | `z_test_f_negi01`, `w_happy_surprise01_f` | `jumping`, `jump`, `leap`, `hop` | `surprise`, `excited` |
+| `failed` | `w_happy_sad01_f` | `failed`, `fail`, `failure`, `error` | `sad`, `deflated`, `angry` |
+| `waiting` | `w_happy_listen01_f` | `waiting`, `wait` | `listen`, `ask`, `talk` |
+| `running` | `w_happy_doubt01_f` | `running`, `run`, `working`, `work`, `processing`, `process`, `thinking`, `think` | `doubt`, `focus`, `scan` |
+| `review` | `w_happy_doubt02_f` | `review`, `reviewing`, `inspect`, `checking`, `check` | `doubt`, `focus`, `think` |
+
+같은 token 그룹에 여러 후보가 있으면 정규화 이름이 token 결합과 정확히 같은 후보, 전용 이름 목록의 앞선 후보, `_b`로 끝나지 않는 front-facing 후보, `w_`로 시작하는 후보, token 수가 적은 후보, 원본 animation 목록에서 앞선 후보 순서로 동률을 해소해야 한다(MUST). `idle`에 의미 후보가 없으면 `pose_default`, 원본 목록의 첫 animation 순서로 실제 존재하는 값을 사용해야 한다(MUST). `running-right`를 포함한 나머지 상태에 의미 후보가 없으면 `pose_default`, 위 규칙으로 확정된 `idle`, 원본 목록의 첫 animation 순서로 실제 존재하는 값을 사용해야 하며(MUST), `running-left`는 확정된 `running-right`와 같은 animation을 사용해야 한다(MUST).
 
 #### Scenario: 직접 이름이 있는 animation
 - **WHEN** animation 목록에 상태 이름과 직접 일치하거나 더 높은 우선순위의 action 이름이 있다
@@ -42,7 +77,14 @@ Ready LiveSD source의 animation을 Codex Pet v2의 9개 표준 상태에 연결
 
 #### Scenario: 후보가 부족함
 - **WHEN** 어떤 상태의 token 후보도 animation 목록에 없다
-- **THEN** 시스템은 `pose_default`, idle 추천값, 목록의 첫 animation 순으로 실제 존재하는 fallback을 선택한다
+- **THEN** `idle`은 `pose_default`, 목록의 첫 animation 순으로 실제 존재하는 fallback을 선택한다
+- **AND** `running-right`와 그 밖의 비-idle 상태는 `pose_default`, 확정된 idle, 목록의 첫 animation 순으로 실제 존재하는 fallback을 선택한다
+- **AND** `running-left`는 확정된 `running-right` animation을 사용한다
+
+#### Scenario: 범용 좌우 추천과 PRSK override
+- **WHEN** 범용 recommender가 `running-right` animation을 결정한다
+- **THEN** `running-left`는 같은 animation과 `mirrorX: true`로 생성되고 다른 상태의 `mirrorX`는 `false`여야 한다
+- **AND** PRSK integration은 범용 결과를 받은 뒤 `running-right.mirrorX: true`, `running-left.mirrorX: false`로 명시적으로 덮어써야 한다
 
 #### Scenario: animation 목록이 비어 있음
 - **WHEN** animation 목록이 비어 있다
@@ -99,6 +141,8 @@ Ready LiveSD source의 animation을 Codex Pet v2의 9개 표준 상태에 연결
 
 ### Requirement: 상태별 실시간 Spine preview
 웹 UI의 상태 preview는 현재 활성 Spine session에서 실제 source animation을 재생해야 한다(MUST). Preview toolbar는 9개 표준 상태를 계약 순서로 나타내는 아이콘 바로가기 group을 제공하고(MUST), 상태 combobox focus와 option 확정도 같은 session에서 해당 animation을 재생해야 한다(MUST). 검색 query, option highlight와 빈 결과는 현재 mapping과 재생을 유지해야 한다(MUST). 직접 animation combobox를 선택하면 상태 선택을 해제하고 해당 animation을 재생해야 한다(MUST). Preview 동작은 option 확정에 따른 해당 mapping 변경 외의 mirror, metadata, package, export와 network 상태를 유지해야 한다(MUST).
+
+바로가기 glyph는 상태 순서대로 `◉`, `→`, `←`, `👋`, `↑`, `×`, `…`, `⚙`, `⌕`를 사용하고(MUST), glyph 자체는 `aria-hidden`인 장식이며 현재 locale의 상태명과 설명을 accessible name과 tooltip으로 제공해야 한다(MUST). 폭이 36rem보다 크면 한 행 9열, 36rem 이하면 3×3 grid로 배치해야 한다(MUST).
 
 #### Scenario: 현재 상태 매핑 확인
 - **WHEN** 사용자가 상태 row의 animation combobox에 focus한다

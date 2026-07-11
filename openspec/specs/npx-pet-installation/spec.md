@@ -8,7 +8,7 @@
 
 ### Requirement: recipe-first npx CLI surface
 
-시스템은 Node.js `>=22.13.0`에서 실행되는 public `chibi-to-codex-pet` package와 같은 이름의 bin을 제공해야 한다(MUST). 사용자에게 제공하는 설치 명령은 `npx -y chibi-to-codex-pet install --recipe <recipe>` 한 형태여야 하며(MUST), repo-local package spec은 개발 검증에서만 사용해야 한다(MUST). `<recipe>`는 base64url JSON, raw JSON 또는 HTTPS recipe URL로 해석할 수 있어야 하며(MUST), CLI는 `--help`, `--version`, `--codex-home`, `--dry-run`, `--force`를 비대화형으로 처리해야 한다(MUST).
+시스템은 Node.js `>=22.13.0`에서 실행되는 public `chibi-to-codex-pet` package와 같은 이름의 bin을 제공해야 한다(MUST). 사용자에게 제공하는 설치 명령은 `npx -y chibi-to-codex-pet install --recipe <recipe>` 한 형태여야 하며(MUST), repo-local package spec은 개발 검증에서만 사용해야 한다(MUST). `<recipe>`는 base64url JSON, raw JSON 또는 HTTPS recipe URL로 해석할 수 있어야 하며(MUST), CLI는 `--help`, `--version`, `--codex-home`, `--dry-run`, `--force`를 비대화형으로 처리해야 한다(MUST). `--recipe`는 정확히 한 번만 허용하고(MUST), 알 수 없는 command·option 또는 값이 없는 option은 renderer와 filesystem 작업 전에 `CLI_USAGE_INVALID`와 exit `2`로 거부해야 한다(MUST).
 
 #### Scenario: npx recipe 설치 명령 실행
 - **WHEN** 사용자가 `npx -y chibi-to-codex-pet install --recipe <recipe>`를 실행한다
@@ -19,7 +19,9 @@
 - **THEN** CLI는 `CLI_USAGE_INVALID`와 exit `2`를 반환하고 filesystem을 변경하지 않는다
 
 ### Requirement: strict Codex Pet recipe schema
-Recipe는 `schemaVersion: 1`, `kind: "livesd-recipe"`, `renderer: "livesd36-codex-pet@1"`, remote `source`, `pet` metadata, framing scale과 optional X/Y offset, PRSK 전체 수평 반전 설정, 그리고 모든 표준 Codex Pet 상태의 animation mapping과 상태별 `mirrorX`를 포함해야 한다(MUST). Recipe의 value는 JSON metadata와 설정으로 제한하고 binary payload와 local path는 허용하지 않아야 한다(MUST). Optional 전체 반전의 기본값은 `false`, X/Y offset의 기본값은 각각 `0`이며(MUST), 새로 생성하는 recipe는 canonical boolean과 framing 값을 명시해야 한다(MUST).
+Recipe는 `schemaVersion: 1`, `kind: "livesd-recipe"`, `renderer: "livesd36-codex-pet@1"`, remote `source`, `pet` metadata, framing과 look 설정, PRSK 전체 수평 반전 설정, 그리고 모든 표준 Codex Pet 상태의 animation mapping을 포함해야 한다(MUST). Top level, source, pet와 각 mapping은 정의된 field 외의 key를 거부해야 하며(MUST), `package`, `packageBase64`, `spritesheet`, `spritesheetBase64`, `zip`, `zipBase64`와 local path 또는 binary payload를 허용하지 않아야 한다(MUST). JavaScript UTF-16 `length` 기준 trim된 `displayName`은 1–80, `description`은 0–280, 각 animation 이름은 1–128, character ID는 안전한 1–128 단일 segment, custom asset base URL 문자열은 최대 2048여야 한다(MUST).
+
+Version 1 parser는 누락된 `globalMirrorX`와 각 mapping의 `mirrorX`를 `false`, `framingScale`과 `lookMovementScale`을 `1.00`, X/Y offset을 각각 `0`으로 정규화해야 한다(MUST). Scale 값은 범위를 검사한 뒤 소수점 둘째 자리까지 반올림해야 하며(MUST), 새로 생성하는 recipe는 모든 canonical boolean과 framing·look 값을 명시해야 한다(MUST).
 
 #### Scenario: 유효한 prsk-chibi-viewer recipe
 - **WHEN** recipe source가 `provider: "prsk-chibi-viewer"`, safe `characterId`, 유효한 scale·offset과 전체 수평 반전 값을 가진다
@@ -31,9 +33,13 @@ Recipe는 `schemaVersion: 1`, `kind: "livesd-recipe"`, `renderer: "livesd36-code
 - **THEN** CLI는 해당 asset base의 `catalog.json`과 모델 리소스만 요청 대상으로 사용한다
 
 #### Scenario: Optional framing 기본값
-- **WHEN** 유효한 schema version 1 recipe에 전체 수평 반전과 X/Y offset key가 없다
-- **THEN** parser는 전체 반전을 `false`, offset을 `0,0`으로 정규화한다
-- **AND** 입력의 상태별 `mirrorX`와 `framingScale`을 그대로 사용한다
+- **WHEN** 유효한 schema version 1 recipe에 전체·상태별 수평 반전, scale 또는 X/Y offset key가 없다
+- **THEN** parser는 전체·누락 상태 반전을 `false`, framing과 look scale을 `1.00`, offset을 `0,0`으로 정규화한다
+- **AND** 명시된 상태별 `mirrorX`와 유효한 framing 값은 보존한다
+
+#### Scenario: Scale 정규화
+- **WHEN** recipe가 범위 안의 `framingScale: 1.234` 또는 `lookMovementScale: 1.256`을 포함한다
+- **THEN** parser는 각각 `1.23`, `1.26`으로 정규화해야 한다
 
 #### Scenario: 잘못된 recipe offset
 - **WHEN** recipe에 범위 밖, 비정수 또는 유한하지 않은 X/Y offset이 있다
@@ -43,9 +49,25 @@ Recipe는 `schemaVersion: 1`, `kind: "livesd-recipe"`, `renderer: "livesd36-code
 - **WHEN** recipe에 `spritesheet`, `spritesheetBase64`, `zip`, `zipBase64`, local path 또는 unknown top-level key가 있다
 - **THEN** CLI는 `RECIPE_INVALID`와 exit `2`를 반환한다
 
+### Requirement: HTTPS recipe 입력 제한
+
+CLI는 HTTPS URL recipe를 `credentials: omit`, `redirect: error`, 20초 timeout으로 요청해야 하며(MUST), response body는 Content-Length 유무와 관계없이 최대 64KiB까지만 읽어 strict UTF-8 JSON으로 parse해야 한다(MUST). HTTP 실패는 `RECIPE_URL_HTTP`, 크기 초과는 `RECIPE_URL_TOO_LARGE`, fetch·redirect·timeout·decode 실패는 `RECIPE_URL_FETCH_FAILED` 또는 `RECIPE_INVALID`와 exit `2`로 반환해야 한다(MUST).
+
+#### Scenario: 정상 HTTPS recipe
+- **WHEN** HTTPS URL이 20초 안에 64KiB 이하의 유효한 schema version 1 JSON을 반환한다
+- **THEN** CLI는 redirect와 credential 전송 없이 해당 JSON을 parse하고 render 절차를 시작해야 한다
+
+#### Scenario: 큰 streaming recipe
+- **WHEN** Content-Length가 없고 누적 body가 64KiB를 초과한다
+- **THEN** CLI는 reader를 취소하고 `RECIPE_URL_TOO_LARGE`와 exit `2`를 반환해야 한다
+
+#### Scenario: HTTP와 redirect 실패
+- **WHEN** recipe URL이 non-2xx status 또는 redirect를 반환한다
+- **THEN** CLI는 redirect를 따라가지 않고 stable recipe URL 오류로 종료하며 renderer를 시작하지 않아야 한다
+
 ### Requirement: recipe render and validation
 
-CLI는 recipe를 package-internal headless browser renderer에 전달해야 하며(MUST), renderer는 web app과 공유하는 remote resource loader, LiveSD frame sampler, Codex Pet exporter와 package validator를 사용해야 한다(MUST). Renderer가 반환한 payload는 설치 전에 `pet.json`과 `spritesheet.png` 두 파일이어야 하며(MUST), manifest ID와 spritesheet v2 계약을 통과해야 한다(MUST).
+CLI는 recipe를 `127.0.0.1`의 임의 port에서 제공되는 package-internal headless browser renderer에 전달해야 하며(MUST), renderer는 web app과 공유하는 remote resource loader, LiveSD frame sampler, Codex Pet exporter와 package validator를 사용해야 한다(MUST). Headless page의 default timeout과 navigation timeout은 180초로 설정해야 한다(MUST). Renderer가 반환한 payload는 설치 전에 `pet.json`과 `spritesheet.png` 두 파일이어야 하며(MUST), manifest ID와 spritesheet v2 계약을 통과해야 한다(MUST).
 
 #### Scenario: recipe를 v2 Pet payload로 렌더링
 - **WHEN** recipe source와 mappings가 유효하고 remote resources가 공유 browser validator를 통과한다
@@ -106,6 +128,14 @@ CLI는 source 검증 후 `<codex-home>/pets` 안에 exclusive per-ID lock과 ran
 ### Requirement: 안정적인 결과와 Codex desktop handoff
 
 CLI는 성공·dry-run·동일 version no-op에 exit `0`, 사용법·home·recipe 오류에 exit `2`, renderer·remote·payload 검증 오류에 exit `3`, destination·lock 충돌에 exit `4`, filesystem·rollback 오류에 exit `5`를 사용해야 한다(MUST). 오류는 stable 영문 code와 한국어 message를 stack 없이 stderr에 쓰고, 성공은 CLI version, Pet ID, absolute destination과 Codex refresh 안내를 stdout에 써야 한다(MUST). Desktop handoff는 설치 경로와 refresh 안내로 완료되며 Codex 설정과 선택 Pet은 사용자가 Codex에서 관리해야 한다(MUST).
+
+| Exit | Stable code |
+|---:|---|
+| 0 | `PET_INSTALLED`, `PET_ALREADY_CURRENT`, `PET_INSTALL_DRY_RUN` |
+| 2 | `CLI_USAGE_INVALID`, `RECIPE_INVALID`, `RECIPE_URL_HTTP`, `RECIPE_URL_TOO_LARGE`, `RECIPE_URL_FETCH_FAILED`, `CODEX_HOME_INVALID` |
+| 3 | `RENDER_BROWSER_MISSING`, `PET_RENDER_FAILED`, `PET_RENDER_INVALID` |
+| 4 | `PET_ALREADY_INSTALLED`, `PET_INSTALL_BUSY` |
+| 5 | `RENDER_SERVER_FAILED`, `PET_INSTALL_IO` |
 
 #### Scenario: 설치 성공 안내
 - **WHEN** recipe render와 fresh install이 성공한다

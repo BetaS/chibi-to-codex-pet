@@ -202,8 +202,8 @@ export class LiveSD36Adapter implements LiveSD36AdapterContract {
       )
 
       session = new WebGLLiveSDPreviewSession({
+        animationData: skeletonData.animations,
         animationState,
-        animations: animationNames,
         atlas,
         batcher,
         bounds,
@@ -213,6 +213,7 @@ export class LiveSD36Adapter implements LiveSD36AdapterContract {
         images: [...imageByPath.values()],
         matrix,
         renderer,
+        runtime,
         scheduler: this.#scheduler,
         shader,
         skeleton,

@@ -18,13 +18,13 @@ const skeletonPath = fileURLToPath(
 const localAssetsReady =
   existsSync(atlasPath) && existsSync(texturePath) && existsSync(skeletonPath)
 const SEAM_PROBES = [
-  { x: 390 / 1092, y: 242 / 1092 },
-  { x: 400 / 1092, y: 249 / 1092 },
-  { x: 410 / 1092, y: 255 / 1092 },
-  { x: 420 / 1092, y: 259 / 1092 },
-  { x: 431 / 1092, y: 262 / 1092 },
-  { x: 441 / 1092, y: 264 / 1092 },
-  { x: 452 / 1092, y: 265 / 1092 },
+  { x: 390 / 1092, y: 342 / 1092 },
+  { x: 400 / 1092, y: 349 / 1092 },
+  { x: 410 / 1092, y: 355 / 1092 },
+  { x: 420 / 1092, y: 359 / 1092 },
+  { x: 431 / 1092, y: 362 / 1092 },
+  { x: 441 / 1092, y: 364 / 1092 },
+  { x: 452 / 1092, y: 365 / 1092 },
 ] as const
 
 async function createCharacterZip(): Promise<Buffer> {

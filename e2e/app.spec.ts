@@ -1,5 +1,38 @@
 import { expect, test } from '@playwright/test'
 
+import { CODEX_PET_SETTINGS_PRESET_STORAGE_KEY } from '../src/features/codex-pet/settingsPresets'
+
+const PRESET_MAPPINGS = Object.fromEntries(
+  [
+    'idle',
+    'running-right',
+    'running-left',
+    'waving',
+    'jumping',
+    'failed',
+    'waiting',
+    'running',
+    'review',
+  ].map((stateId) => [
+    stateId,
+    { animationName: 'pose_default', mirrorX: stateId === 'running-right' },
+  ]),
+)
+
+function storedPreset(displayName: string, updatedAt: number) {
+  return {
+    description: `${displayName} settings`,
+    displayName,
+    framingOffset: { x: 0, y: 0 },
+    framingScale: 1,
+    globalMirrorX: false,
+    lookMovementScale: 1,
+    mappings: PRESET_MAPPINGS,
+    source: null,
+    updatedAt,
+  }
+}
+
 test('desktop Chromium에서 초기 앱 shell을 표시한다', async ({ page }) => {
   const providerRequests: string[] = []
   page.on('request', (request) => {
@@ -29,19 +62,33 @@ test('desktop Chromium에서 초기 앱 shell을 표시한다', async ({ page })
     page.getByRole('button', { name: '불러오기' }),
   ).toBeVisible()
   await expect(page.locator('.status-card')).toBeVisible()
-  await expect(page.getByLabel('LiveSD WebGL 미리보기')).toBeVisible()
+  await expect(page.getByLabel('LiveSD WebGL 미리보기')).not.toBeVisible()
+  await expect(page.getByText('아직 표시할 캐릭터가 없습니다.')).toBeVisible()
   expect(providerRequests).toEqual([])
 
-  const [controlBox, previewBox, builderBox] = await Promise.all([
+  const [
+    controlBox,
+    previewBox,
+    previewStageBox,
+    builderBox,
+  ] = await Promise.all([
     page.locator('.control-panel').boundingBox(),
     page.locator('.preview-panel').boundingBox(),
+    page.locator('.preview-stage').boundingBox(),
     page.locator('.codex-pet-builder').boundingBox(),
   ])
   expect(controlBox).not.toBeNull()
   expect(previewBox).not.toBeNull()
+  expect(previewStageBox).not.toBeNull()
   expect(builderBox).not.toBeNull()
-  expect(previewBox!.height).toBeLessThanOrEqual(480)
-  expect(previewBox!.x).toBe(builderBox!.x)
+  expect(previewBox!.width).toBeLessThanOrEqual(768)
+  expect(previewBox!.height).toBeGreaterThanOrEqual(528)
+  expect(previewBox!.height).toBeLessThanOrEqual(576)
+  expect(previewBox!.x + previewBox!.width / 2).toBeCloseTo(
+    builderBox!.x + builderBox!.width / 2,
+    0,
+  )
+  await expect(page.getByTestId('livesd-preview-border-box')).not.toBeVisible()
   expect(controlBox!.x).toBeLessThan(previewBox!.x)
   expect(builderBox!.y).toBeGreaterThan(previewBox!.y)
 
@@ -75,4 +122,71 @@ test('손상된 사용자 ZIP을 stable code와 한국어 message로 표시한�
   const alert = page.getByRole('alert')
   await expect(alert).toContainText('ARCHIVE_CORRUPT')
   await expect(alert).toContainText('ZIP을 읽거나 압축 해제할 수 없습니다')
+})
+
+test('mobile 빈 상태는 LiveSD frame을 숨기고 가로 overflow를 만들지 않는다', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/')
+
+  await expect(page.getByText('아직 표시할 캐릭터가 없습니다.')).toBeVisible()
+  await expect(page.getByTestId('livesd-preview-border-box')).not.toBeVisible()
+  expect(
+    await page.evaluate(() => ({
+      clientWidth: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+    })),
+  ).toEqual({ clientWidth: 390, scrollWidth: 390 })
+})
+
+test('source 없는 저장 preset을 resource control보다 먼저 확정하고 요청 없이 유지한다', async ({
+  page,
+}) => {
+  const providerRequests: string[] = []
+  page.on('request', (request) => {
+    if (/prsk-chibi-viewer|assets\.pjsek|custom-prsk/u.test(request.url())) {
+      providerRequests.push(request.url())
+    }
+  })
+  await page.addInitScript(({ key, value }) => {
+    window.localStorage.setItem(key, value)
+  }, {
+    key: CODEX_PET_SETTINGS_PRESET_STORAGE_KEY,
+    value: JSON.stringify({
+      version: 1,
+      activePresetName: 'Airi First',
+      presets: {
+        'Airi First': storedPreset('Airi First', 2),
+        'Miku First': storedPreset('Miku First', 1),
+      },
+    }),
+  })
+
+  await page.goto('/')
+  const presetSelector = page.getByRole('combobox', {
+    name: '저장 프리셋',
+  })
+  const sourceSelector = page.getByRole('radio', {
+    name: '기본 제공 리소스',
+  })
+  await expect(presetSelector).toHaveCount(1)
+  await expect(presetSelector).toHaveValue('Airi First')
+  const [presetBox, sourceBox] = await Promise.all([
+    presetSelector.boundingBox(),
+    sourceSelector.boundingBox(),
+  ])
+  expect(presetBox).not.toBeNull()
+  expect(sourceBox).not.toBeNull()
+  expect(presetBox!.y).toBeLessThan(sourceBox!.y)
+
+  await presetSelector.selectOption('Miku First')
+  await expect(presetSelector).toHaveValue('Miku First')
+  expect(
+    await page.evaluate((key) => {
+      const stored = window.localStorage.getItem(key)
+      return stored ? JSON.parse(stored).activePresetName : null
+    }, CODEX_PET_SETTINGS_PRESET_STORAGE_KEY),
+  ).toBe('Miku First')
+  expect(providerRequests).toEqual([])
 })

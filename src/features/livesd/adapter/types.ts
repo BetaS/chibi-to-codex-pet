@@ -1,3 +1,4 @@
+import type { CodexPetAnimationMappings } from '../../codex-pet/animationMapping'
 import type { LiveSDAtlasBundle } from '../model'
 import type { LiveSDLookTarget } from '../rendering/lookTarget'
 import type { LiveSDFramingOffset } from '../rendering/framingOffset'
@@ -30,6 +31,7 @@ export interface LiveSDPreviewSession {
   onError(listener: (error: LiveSDPreviewError) => void): () => void
   play(name: string): void
   resize(width: number, height: number): void
+  setAnimationMappings(mappings: Readonly<CodexPetAnimationMappings>): void
   setFramingOffset(offset: LiveSDFramingOffset): void
   setFramingScale(scale: number): void
   setLookTarget(target: LiveSDLookTarget | null, movementScale?: number): void

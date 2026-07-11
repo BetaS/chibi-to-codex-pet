@@ -240,6 +240,10 @@ h1 {
   margin-bottom: 1.75rem;
 }
 
+.resource-preset-selector {
+  margin-top: 0.9rem;
+}
+
 .source-mode-toggle {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -827,11 +831,12 @@ h1 {
 
 .preview-stage {
   position: relative;
-  display: grid;
+  display: flex;
   min-height: 32rem;
   padding: 1.5rem;
   overflow: hidden;
-  place-items: center;
+  align-items: center;
+  justify-content: center;
   border-radius: 0 0 1.15rem 1.15rem;
   background-color: #0b0f1a;
   background-image:
@@ -851,6 +856,11 @@ h1 {
   outline-offset: 4px;
   background: rgb(4 7 13 / 18%);
   box-shadow: 0 1.2rem 3rem rgb(0 0 0 / 24%);
+}
+
+.livesd-preview-border-box--empty {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .preview-border-label {
@@ -1430,7 +1440,9 @@ h1 {
 
 @media (min-width: 58.001rem) {
   .preview-panel {
-    height: clamp(25rem, 48vh, 30rem);
+    width: min(100%, 48rem);
+    height: clamp(33rem, 58vh, 36rem);
+    justify-self: center;
   }
 
   .preview-stage,
@@ -1442,6 +1454,8 @@ h1 {
     width: auto;
     max-width: 100%;
     height: calc(100% - 0.5rem);
+    max-height: 100%;
+    flex: 0 1 auto;
   }
 }
 

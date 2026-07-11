@@ -246,7 +246,9 @@ function parseCharacterId(value: unknown): string {
   return characterId
 }
 
-function parseSource(value: unknown): CodexPetRecipeSource {
+export function parseCodexPetRecipeSource(
+  value: unknown,
+): CodexPetRecipeSource {
   const source = assertRecord(value, 'source')
   assertNoForbiddenBinaryKeys(source)
   const provider = source.provider
@@ -372,7 +374,7 @@ export function parseCodexPetRecipe(value: unknown): CodexPetRecipe {
       recipe.globalMirrorX,
       'globalMirrorX',
     ),
-    source: parseSource(recipe.source),
+    source: parseCodexPetRecipeSource(recipe.source),
     pet: parsePet(recipe.pet),
     mappings: parseMappings(recipe.mappings),
   }

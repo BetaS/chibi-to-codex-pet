@@ -23,7 +23,7 @@ browser UI는 canonical locale `ko`, `en`, `ja`, `zh-CN`을 지원해야 한다(
 - **AND** 한국어를 암묵적인 fallback으로 사용해서는 안 된다
 
 ### Requirement: 사용자 locale 선택과 저장
-상단 selector에서 사용자가 선택한 canonical locale은 즉시 적용되고 versioned same-origin browser storage에 저장되어야 한다(MUST). 다음 mount에서는 유효한 저장값이 browser 언어보다 우선해야 한다(MUST). 저장값이 손상되었거나 storage 접근이 실패해도 앱 mount와 현재 session은 계속 동작해야 한다(MUST).
+상단 selector에서 사용자가 선택한 canonical locale은 즉시 적용되고 same-origin `localStorage`의 `chibi-to-codex-pet.locale.v1` key에 JSON wrapper 없이 canonical locale 문자열 자체로 저장되어야 한다(MUST). 다음 mount에서는 `ko`, `en`, `ja`, `zh-CN` 중 하나인 정확한 저장값이 browser 언어보다 우선해야 한다(MUST). 저장값이 손상되었거나 storage 접근이 실패해도 앱 mount와 현재 session은 계속 동작해야 한다(MUST).
 
 #### Scenario: 저장된 선택 우선
 - **WHEN** browser 언어는 일본어지만 저장된 사용자 선택이 `en`이다
@@ -52,6 +52,8 @@ browser UI는 canonical locale `ko`, `en`, `ja`, `zh-CN`을 지원해야 한다(
 
 ### Requirement: 전체 browser UI 번역 완전성
 앱 shell, 게임 탭, resource selector, local/remote 가져오기, catalog·animation combobox, LiveSD preview, framing border·scale·X/Y offset, preset selector·새 세션, Codex Pet 상태별 searchable animation mapping·상태 바로가기·package·installed preview, footer의 visible text, form label, placeholder, tooltip, empty/loading/progress/error 문구와 ARIA 이름은 현재 locale의 catalog에서 렌더링되어야 한다(MUST). 네 catalog는 동일한 canonical key 집합을 가져야 하며(MUST), 개발자가 한 locale에만 browser-visible key를 추가할 수 없어야 한다(MUST NOT). 상태 바로가기의 glyph는 locale과 무관한 장식 icon으로 유지하고(MUST), accessible name과 tooltip에는 현재 locale의 상태명을 사용해야 한다(MUST).
+
+Runtime lookup은 현재 locale에 key가 없을 때 같은 key의 영어 값을 최종 fallback으로 사용해야 하며(MUST), named placeholder는 전달된 값만 치환하고 누락된 placeholder token은 진단할 수 있도록 원문 `{name}` 형태로 유지해야 한다(MUST). Catalog 완전성 검사는 정상 build에서 이 fallback에 의존하는 누락 key가 없도록 보장해야 한다(MUST).
 
 #### Scenario: 네 locale의 주요 workflow
 - **WHEN** 같은 ready PRSK source를 `ko`, `en`, `ja`, `zh-CN`에서 각각 표시한다

@@ -42,6 +42,10 @@ import {
   mergeLiveSDWorldBounds,
 } from '../rendering/alphaBounds'
 import {
+  calculateLiveSDCanonicalCoarseProjection,
+  LIVE_SD_CANONICAL_BOUNDS_PADDING_RATIO,
+} from '../rendering/canonicalProjection'
+import {
   assertLiveSDFramingScale,
   LIVE_SD_FRAMING_SCALE_DEFAULT,
 } from '../rendering/framingScale'
@@ -64,7 +68,6 @@ import type {
   LiveSDFrameSamplingResult,
 } from './types'
 
-const BOUNDS_PADDING_RATIO = 0.1
 const TOTAL_PROGRESS_STEPS =
   CODEX_PET_STANDARD_FRAME_COUNT * 2 + CODEX_PET_TOTAL_FRAME_COUNT + 1
 
@@ -322,50 +325,23 @@ export function mergeLiveSDFrameBounds(
 
 export function calculateLiveSDFrameProjection(
   bounds: LiveSDFrameBounds,
-  paddingRatio = BOUNDS_PADDING_RATIO,
+  paddingRatio = LIVE_SD_CANONICAL_BOUNDS_PADDING_RATIO,
   targetWidth = CODEX_PET_CELL_WIDTH,
   targetHeight = CODEX_PET_CELL_HEIGHT,
 ): LiveSDFrameProjection {
-  const boundsWidth = bounds.maxX - bounds.minX
-  const boundsHeight = bounds.maxY - bounds.minY
-  if (
-    ![bounds.minX, bounds.minY, bounds.maxX, bounds.maxY].every(
-      Number.isFinite,
-    ) ||
-    !Number.isFinite(boundsWidth) ||
-    !Number.isFinite(boundsHeight) ||
-    boundsWidth <= 0 ||
-    boundsHeight <= 0 ||
-    !Number.isFinite(paddingRatio) ||
-    paddingRatio < 0 ||
-    !Number.isFinite(targetWidth) ||
-    !Number.isFinite(targetHeight) ||
-    targetWidth <= 0 ||
-    targetHeight <= 0
-  ) {
+  try {
+    return calculateLiveSDCanonicalCoarseProjection(
+      bounds,
+      targetWidth,
+      targetHeight,
+      paddingRatio,
+    )
+  } catch (error) {
     throw new LiveSDFrameSamplingError(
       'FRAME_BOUNDS_FAILED',
       '선택한 animation의 공통 렌더링 영역을 계산할 수 없습니다.',
+      { cause: error },
     )
-  }
-
-  const centerX = (bounds.minX + bounds.maxX) / 2
-  const centerY = (bounds.minY + bounds.maxY) / 2
-  let width = boundsWidth * (1 + paddingRatio * 2)
-  let height = boundsHeight * (1 + paddingRatio * 2)
-  const targetAspect = targetWidth / targetHeight
-
-  if (width / height < targetAspect) {
-    width = height * targetAspect
-  } else {
-    height = width / targetAspect
-  }
-
-  return {
-    x: centerX - width / 2,
-    y: centerY - height / 2,
-    width,
-    height,
   }
 }
 

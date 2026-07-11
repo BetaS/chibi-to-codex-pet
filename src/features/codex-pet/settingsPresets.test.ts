@@ -68,6 +68,33 @@ describe('Codex Pet settings presets', () => {
     expect(raw).not.toContain('packageUrl')
   })
 
+  it('원격 source 식별자를 저장하고 legacy source 없는 preset은 유지한다', () => {
+    const saved = saveCodexPetSettingsPreset({
+      ...presetInput('Miku'),
+      source: {
+        provider: 'prsk-chibi-viewer',
+        characterId: 'sd_21miku_normal',
+      },
+    }, localStorage, 10)
+
+    expect(saved.presets.Miku.source).toEqual({
+      provider: 'prsk-chibi-viewer',
+      characterId: 'sd_21miku_normal',
+    })
+    const legacyDocument = JSON.parse(JSON.stringify(saved)) as {
+      presets: Record<string, Record<string, unknown>>
+    }
+    delete legacyDocument.presets.Miku?.source
+    localStorage.setItem(
+      CODEX_PET_SETTINGS_PRESET_STORAGE_KEY,
+      JSON.stringify(legacyDocument),
+    )
+
+    expect(
+      readCodexPetSettingsPresetCatalog(localStorage).presets.Miku?.source,
+    ).toBeNull()
+  })
+
   it('catalog를 20개로 제한하고 가장 오래된 preset부터 제거한다', () => {
     for (let index = 0; index <= CODEX_PET_SETTINGS_PRESET_LIMIT; index += 1) {
       saveCodexPetSettingsPreset(

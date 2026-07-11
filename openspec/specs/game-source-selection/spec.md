@@ -7,18 +7,24 @@
 ## Requirements
 
 ### Requirement: 게임 source registry
-시스템은 지원 대상 게임을 안정적인 ID, 표시명, 노출 순서, 지원 상태와 선택 가능한 integration으로 정의하는 단일 registry를 제공해야 한다(SHALL). 초기 registry는 `프로세카(prsk)`, `레뷰 스타라이트(strr)`, `BanG Dream!(garupa)` 순서를 사용해야 한다(MUST).
+시스템은 지원 대상 게임을 안정적인 ID, locale message key, 노출 순서, 지원 상태와 선택 가능한 integration으로 정의하는 단일 registry를 제공해야 한다(SHALL). Registry 순서는 `prsk`, `strr`, `garupa`이고(MUST), label은 현재 locale에서 아래 값으로 해석해야 한다(MUST).
+
+| ID | `ko` | `en` | `ja` | `zh-CN` |
+|---|---|---|---|---|
+| `prsk` | 프로세카 | Project SEKAI | プロセカ | 世界计划 |
+| `strr` | 레뷰 스타라이트 | Revue Starlight | 少女☆歌劇 レヴュースタァライト | 少女☆歌剧 Revue Starlight |
+| `garupa` | BanG Dream! | BanG Dream! | BanG Dream! | BanG Dream! |
 
 #### Scenario: 초기 게임 목록 조회
 - **WHEN** 앱이 게임 source registry를 조회한다
-- **THEN** 첫 항목은 `id: "prsk"`, 표시명 `프로세카`, 상태 `available`이어야 한다
-- **AND** 두 번째 항목은 `id: "strr"`, 표시명 `레뷰 스타라이트`, 상태 `coming-soon`이어야 한다
-- **AND** 세 번째 항목은 `id: "garupa"`, 표시명 `BanG Dream!`, 상태 `coming-soon`이어야 한다
+- **THEN** 첫 항목은 `id: "prsk"`, `labelKey: "game.prsk"`, 상태 `available`과 PRSK integration을 가져야 한다
+- **AND** 두 번째 항목은 `id: "strr"`, `labelKey: "game.strr"`, 상태 `coming-soon`이고 integration이 없어야 한다
+- **AND** 세 번째 항목은 `id: "garupa"`, `labelKey: "game.garupa"`, 상태 `coming-soon`이고 integration이 없어야 한다
 
 #### Scenario: 표시와 routing의 단일 정의
 - **WHEN** 활성 게임 탭을 렌더링하고 builder integration을 결정한다
 - **THEN** 두 동작은 같은 registry entry를 사용해야 한다
-- **AND** 표시명 문자열을 별도 routing key로 해석해서는 안 된다
+- **AND** localized label 문자열은 routing key로 사용하지 않고 stable ID와 status로 integration을 결정해야 한다
 
 ### Requirement: 상단 게임 선택 탭
 앱은 model source, preview와 Codex Pet builder보다 위에 게임 선택 tablist를 표시해야 한다(SHALL). 초기 선택은 `프로세카`여야 하며(MUST), 선택된 available 탭과 준비중 탭의 상태를 시각적·programmatic 방식으로 구분해야 한다(MUST).

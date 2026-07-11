@@ -1,7 +1,20 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { createSkeletonHeader } from '../../../test/skeletonFixtures'
+import type { CodexPetAnimationMappings } from '../../codex-pet/animationMapping'
+import {
+  CODEX_PET_CELL_HEIGHT,
+  CODEX_PET_CELL_WIDTH,
+  CODEX_PET_STANDARD_FRAME_COUNT,
+  CODEX_PET_STATES,
+} from '../../codex-pet/contract'
 import type { LiveSDAtlasBundle } from '../model'
+import {
+  calculateLiveSDFinalProjection,
+  convertLiveSDAlphaPixelBoundsToWorld,
+  LIVE_SD_FRAME_INSET_PIXELS,
+} from '../rendering/alphaBounds'
+import { calculateLiveSDCanonicalCoarseProjection } from '../rendering/canonicalProjection'
 import type { Spine36Runtime } from '../runtime/runtimeLoader'
 import { LiveSD36Adapter } from './LiveSD36Adapter'
 import { appendSkeletonTerminator } from './skeletonPadding'
@@ -28,6 +41,7 @@ interface MockRuntimeFixture {
     readonly readSkeletonData: ReturnType<typeof vi.fn>
     readonly rendererDraw: ReturnType<typeof vi.fn>
     readonly rendererPremultipliedAlphaAtDraw: boolean[]
+    readonly sampledAnimationApply: ReturnType<typeof vi.fn>
     readonly setAnimation: ReturnType<typeof vi.fn>
     readonly shaderDispose: ReturnType<typeof vi.fn>
     readonly shaderUnbind: ReturnType<typeof vi.fn>
@@ -83,13 +97,18 @@ function createMockRuntime(
   } as unknown as spine.Bone
   const rendererDraw = vi.fn()
   const rendererPremultipliedAlphaAtDraw: boolean[] = []
+  const sampledAnimationApply = vi.fn()
   const matrixOrtho = vi.fn()
   const parsedBuffers: ArrayBuffer[] = []
   const readSkeletonData = vi.fn((data: ArrayBuffer) => {
     calls.push('readSkeletonData')
     parsedBuffers.push(data)
     return {
-      animations: animationNames.map((name) => ({ name })),
+      animations: animationNames.map((name) => ({
+        apply: sampledAnimationApply,
+        duration: 4,
+        name,
+      })),
     }
   })
 
@@ -175,6 +194,8 @@ function createMockRuntime(
       }
     },
     Skeleton: MockSkeleton,
+    MixDirection: { in: 'in' },
+    MixPose: { setup: 'setup' },
     AnimationStateData: class {
       constructor(data: unknown) {
         void data
@@ -252,6 +273,7 @@ function createMockRuntime(
       readSkeletonData,
       rendererDraw,
       rendererPremultipliedAlphaAtDraw,
+      sampledAnimationApply,
       setAnimation,
       shaderDispose,
       shaderUnbind: shader.unbind,
@@ -259,6 +281,15 @@ function createMockRuntime(
       worldTransform,
     },
   }
+}
+
+function createMappings(
+  animationName: string,
+  mirrorX = false,
+): CodexPetAnimationMappings {
+  return Object.fromEntries(
+    CODEX_PET_STATES.map(({ id }) => [id, { animationName, mirrorX }]),
+  ) as unknown as CodexPetAnimationMappings
 }
 
 function createCanvas(): {
@@ -448,6 +479,100 @@ describe('LiveSD36Adapter', () => {
     expect(fixture.state.batcherDispose).toHaveBeenCalledTimes(1)
     expect(fixture.state.shaderDispose).toHaveBeenCalledTimes(1)
     expect(imageDispose).toHaveBeenCalledTimes(1)
+  })
+
+  it('57개 상태 pose로 계산한 export canonical projection을 preview에도 그대로 적용한다', async () => {
+    const fixture = createMockRuntime(['pose_default', 'idle'])
+    const { canvas, gl } = createCanvas()
+    const adapter = new LiveSD36Adapter({
+      runtimeLoader: { load: vi.fn(async () => fixture.runtime) },
+      imageLoader: vi.fn(async () => loadedImage()),
+      scheduler: createScheduler().scheduler,
+    })
+    const session = await adapter.createPreview({
+      canvas,
+      atlasBundle: createBundle(),
+      skeletonData: createSkeletonHeader('3.6.53'),
+    })
+    const mappings = createMappings('idle')
+    const readsBeforeCanonical = vi.mocked(gl.readPixels).mock.calls.length
+    const drawsBeforeCanonical = fixture.state.rendererDraw.mock.calls.length
+
+    session.setAnimationMappings(mappings)
+
+    expect(fixture.state.sampledAnimationApply).toHaveBeenCalledTimes(
+      CODEX_PET_STANDARD_FRAME_COUNT * 2,
+    )
+    expect(gl.readPixels).toHaveBeenCalledTimes(
+      readsBeforeCanonical + CODEX_PET_STANDARD_FRAME_COUNT,
+    )
+    expect(fixture.state.rendererDraw).toHaveBeenCalledTimes(
+      drawsBeforeCanonical + CODEX_PET_STANDARD_FRAME_COUNT + 1,
+    )
+    expect(gl.viewport).toHaveBeenCalledWith(
+      0,
+      0,
+      CODEX_PET_CELL_WIDTH,
+      CODEX_PET_CELL_HEIGHT,
+    )
+    expect(gl.viewport).toHaveBeenLastCalledWith(0, 0, 640, 480)
+
+    const coarseProjection = calculateLiveSDCanonicalCoarseProjection(
+      { minX: -10, minY: -20, maxX: 10, maxY: 20 },
+      CODEX_PET_CELL_WIDTH,
+      CODEX_PET_CELL_HEIGHT,
+    )
+    const visibleBounds = convertLiveSDAlphaPixelBoundsToWorld(
+      { left: 48, top: 52, right: 143, bottom: 155 },
+      coarseProjection,
+      CODEX_PET_CELL_WIDTH,
+      CODEX_PET_CELL_HEIGHT,
+    )
+    const expectProjection = (
+      framingScale: number,
+      framingOffset: { readonly x: number; readonly y: number },
+    ) => {
+      const expected = calculateLiveSDFinalProjection(
+        visibleBounds,
+        CODEX_PET_CELL_WIDTH,
+        CODEX_PET_CELL_HEIGHT,
+        LIVE_SD_FRAME_INSET_PIXELS,
+        framingScale,
+        framingOffset,
+      )
+      expect(fixture.state.matrixOrtho).toHaveBeenLastCalledWith(
+        expected.x,
+        expected.y,
+        expected.width,
+        expected.height,
+      )
+    }
+    expectProjection(1, { x: 0, y: 0 })
+
+    const readsAfterCanonical = vi.mocked(gl.readPixels).mock.calls.length
+    const sampledAppliesAfterCanonical =
+      fixture.state.sampledAnimationApply.mock.calls.length
+    session.setFramingScale(1.16)
+    session.setFramingOffset({ x: 0, y: 14 })
+    expectProjection(1.16, { x: 0, y: 14 })
+    expect(gl.readPixels).toHaveBeenCalledTimes(readsAfterCanonical)
+    expect(fixture.state.sampledAnimationApply).toHaveBeenCalledTimes(
+      sampledAppliesAfterCanonical,
+    )
+
+    session.setAnimationMappings(createMappings('idle', true))
+    expect(gl.readPixels).toHaveBeenCalledTimes(readsAfterCanonical)
+    expect(fixture.state.sampledAnimationApply).toHaveBeenCalledTimes(
+      sampledAppliesAfterCanonical,
+    )
+
+    session.play('pose_default')
+    expectProjection(1.16, { x: 0, y: 14 })
+    expect(gl.readPixels).toHaveBeenCalledTimes(readsAfterCanonical)
+    expect(fixture.state.sampledAnimationApply).toHaveBeenCalledTimes(
+      sampledAppliesAfterCanonical,
+    )
+    session.dispose()
   })
 
   it('cached visible bounds에서 Pet 크기와 위치를 다시 투영하고 animation과 resize에 framing을 유지한다', async () => {

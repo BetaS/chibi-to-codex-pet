@@ -70,7 +70,7 @@ PRSK integration은 local ZIP, development source, custom provider와 `prsk-chib
 - **AND** CLI renderer build와 production artifact 검사가 산출물 allowlist를 확인해야 한다
 
 ### Requirement: PRSK 기본 facing 보정 설정
-PRSK integration은 왼쪽을 보는 source 모델을 기준 방향으로 사용하고 전체와 좌·우 이동을 독립적으로 조절하는 수평 반전 선택을 제공해야 한다(SHALL). Ready PRSK source의 초기 추천은 `globalMirrorX: false`, `running-left.mirrorX: false`, `running-right.mirrorX: true`이며(MUST), 사용자는 package 생성 전에 세 값을 독립적으로 변경할 수 있어야 한다(MUST).
+PRSK integration은 왼쪽을 보는 source 모델을 기준 방향으로 사용하고 전체와 좌·우 이동을 독립적으로 조절하는 수평 반전 선택을 제공해야 한다(SHALL). Ready PRSK source의 초기 추천은 `globalMirrorX: false`, `running-left.mirrorX: false`, `running-right.mirrorX: true`이며(MUST), 사용자는 package 생성 전에 세 값을 독립적으로 변경할 수 있어야 한다(MUST). 이 값은 source 독립 animation recommender가 만든 mapping에 PRSK integration이 적용하는 override여야 하며(MUST), 범용 LiveSD 또는 Codex Pet module에 PRSK facing 상수를 배치해서는 안 된다(MUST NOT).
 
 #### Scenario: PRSK 기본 추천
 - **WHEN** local 또는 remote PRSK source가 ready가 된다
@@ -81,3 +81,8 @@ PRSK integration은 왼쪽을 보는 source 모델을 기준 방향으로 사용
 - **WHEN** 사용자가 다른 PRSK source를 성공적으로 활성화한다
 - **THEN** 시스템은 새 source에 대한 전체 반전 추천을 다시 계산해야 한다
 - **AND** 이전 source에서 수정한 방향 설정을 암묵적으로 유지해서는 안 된다
+
+#### Scenario: Facing 상수 소유권
+- **WHEN** PRSK 기본 방향 설정의 source dependency를 검사한다
+- **THEN** `running-right: true`, `running-left: false` override는 PRSK integration 경계가 소유해야 한다
+- **AND** 공통 recommender와 sampler는 전달받은 mapping과 boolean만 소비해야 한다

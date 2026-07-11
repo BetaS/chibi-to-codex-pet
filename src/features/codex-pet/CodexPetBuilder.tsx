@@ -102,7 +102,11 @@ export interface CodexPetBuilderProps {
   readonly onMappingsChange?: (
     mappings: Readonly<CodexPetAnimationMappings> | null,
   ) => void
+  readonly onPresetCatalogChange?: (
+    catalog: CodexPetSettingsPresetCatalog,
+  ) => void
   readonly onPreviewLookMovementScaleChange?: (scale: number) => void
+  readonly presetCatalog?: CodexPetSettingsPresetCatalog
   readonly recipeSource?: CodexPetRecipeSource | null
   readonly services?: Partial<CodexPetBuilderServices>
   readonly source: CodexPetBuilderSource | null
@@ -286,8 +290,10 @@ function CodexPetBuilderContent({
   onFramingChange,
   onGlobalMirrorXChange,
   onMappingsChange,
+  onPresetCatalogChange,
   onPreviewAnimationChange,
   onPreviewLookMovementScaleChange,
+  presetCatalog: controlledPresetCatalog,
   recipeSource,
   services,
   source,
@@ -296,13 +302,17 @@ function CodexPetBuilderContent({
   const [initialPresetCatalog] = useState(() =>
     readCodexPetSettingsPresetCatalog(),
   )
+  const [uncontrolledPresetCatalog, setUncontrolledPresetCatalog] =
+    useState(initialPresetCatalog)
+  const presetCatalog =
+    controlledPresetCatalog ?? uncontrolledPresetCatalog
   const [initialState] = useState(() =>
     createInitialBuilderState(
       source,
       animations,
       defaultGlobalMirrorX,
       defaultStateMirrorX,
-      initialPresetCatalog,
+      controlledPresetCatalog ?? initialPresetCatalog,
     ),
   )
   const resolvedServices = useMemo<CodexPetBuilderServices>(
@@ -317,6 +327,7 @@ function CodexPetBuilderContent({
   })
   const generationRef = useRef(0)
   const initialFramingAppliedRef = useRef(false)
+  const appliedPresetNameRef = useRef(presetCatalog.activePresetName)
   const urlsRef = useRef<Pick<BuilderResult, 'packageUrl' | 'spritesheetUrl'> | null>(
     null,
   )
@@ -335,7 +346,6 @@ function CodexPetBuilderContent({
   const [progress, setProgress] =
     useState<LiveSDFrameSamplingProgress | null>(null)
   const [mappingQueryResetKey, setMappingQueryResetKey] = useState(0)
-  const [presetCatalog, setPresetCatalog] = useState(initialPresetCatalog)
   const [result, setResult] = useState<BuilderResult | null>(null)
   const animationOptions = useMemo<readonly SearchableComboboxOption[]>(
     () =>
@@ -486,7 +496,18 @@ function CodexPetBuilderContent({
     setLookMovementScale(nextScale)
   }
 
-  const applyPreset = (preset: CodexPetSettingsPreset | null) => {
+  const updatePresetCatalog = useCallback((
+    nextCatalog: CodexPetSettingsPresetCatalog,
+  ) => {
+    if (controlledPresetCatalog === undefined) {
+      setUncontrolledPresetCatalog(nextCatalog)
+    }
+    onPresetCatalogChange?.(nextCatalog)
+  }, [controlledPresetCatalog, onPresetCatalogChange])
+
+  const applyPreset = useCallback((
+    preset: CodexPetSettingsPreset | null,
+  ) => {
     let nextMappings: CodexPetAnimationMappings | null = null
     try {
       if (source && animations.length > 0) {
@@ -539,16 +560,30 @@ function CodexPetBuilderContent({
         )
       }
     }
-  }
+  }, [
+    animations,
+    clearResult,
+    defaultGlobalMirrorX,
+    defaultStateMirrorX,
+    onFramingChange,
+    onPreviewAnimationChange,
+    source,
+  ])
+
+  useEffect(() => {
+    const nextPresetName = presetCatalog.activePresetName
+    if (appliedPresetNameRef.current === nextPresetName) {
+      return
+    }
+    appliedPresetNameRef.current = nextPresetName
+    applyPreset(
+      nextPresetName ? presetCatalog.presets[nextPresetName] ?? null : null,
+    )
+  }, [applyPreset, presetCatalog.activePresetName, presetCatalog.presets])
 
   const changeActivePreset = (presetName: string | null) => {
     const nextCatalog = selectCodexPetSettingsPreset(presetName)
-    setPresetCatalog(nextCatalog)
-    applyPreset(
-      nextCatalog.activePresetName
-        ? nextCatalog.presets[nextCatalog.activePresetName]
-        : null,
-    )
+    updatePresetCatalog(nextCatalog)
   }
 
   const cancelExport = () => {
@@ -661,17 +696,18 @@ function CodexPetBuilderContent({
       setProgress(null)
       setPhase('ready')
       try {
-        setPresetCatalog(
-          saveCodexPetSettingsPreset({
-            description,
-            displayName,
-            framingOffset: sampledFramingOffset,
-            framingScale: sampledFramingScale,
-            globalMirrorX: sampledGlobalMirrorX,
-            lookMovementScale: sampledLookMovementScale,
-            mappings: sampledMappings,
-          }),
-        )
+        const nextCatalog = saveCodexPetSettingsPreset({
+          description,
+          displayName,
+          framingOffset: sampledFramingOffset,
+          framingScale: sampledFramingScale,
+          globalMirrorX: sampledGlobalMirrorX,
+          lookMovementScale: sampledLookMovementScale,
+          mappings: sampledMappings,
+          source: recipeSource ?? null,
+        })
+        appliedPresetNameRef.current = nextCatalog.activePresetName
+        updatePresetCatalog(nextCatalog)
       } catch {
         // Preset validation or persistence must not invalidate a valid package.
       }
@@ -708,27 +744,25 @@ function CodexPetBuilderContent({
           <p>{t('builder.description')}</p>
         </div>
         <div className="codex-pet-builder__header-actions">
-          <label className="codex-pet-preset-selector">
-            <span>{t('builder.preset')}</span>
-            <select
-              disabled={
-                phase === 'sampling' ||
-                phase === 'packaging' ||
-                phase === 'validating'
-              }
-              onChange={(event) =>
-                changeActivePreset(event.target.value || null)
-              }
-              value={presetCatalog.activePresetName ?? ''}
-            >
-              <option value="">{t('builder.newSession')}</option>
-              {Object.keys(presetCatalog.presets).map((presetName) => (
-                <option key={presetName} value={presetName}>
-                  {presetName}
-                </option>
-              ))}
-            </select>
-          </label>
+          {controlledPresetCatalog === undefined ? (
+            <label className="codex-pet-preset-selector">
+              <span>{t('builder.preset')}</span>
+              <select
+                disabled={busy}
+                onChange={(event) =>
+                  changeActivePreset(event.target.value || null)
+                }
+                value={presetCatalog.activePresetName ?? ''}
+              >
+                <option value="">{t('builder.newSession')}</option>
+                {Object.keys(presetCatalog.presets).map((presetName) => (
+                  <option key={presetName} value={presetName}>
+                    {presetName}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <span className="compatibility-badge">v2 · 73 frames · 1536×2288</span>
         </div>
       </div>

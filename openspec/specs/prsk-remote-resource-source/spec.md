@@ -7,7 +7,12 @@ Provided 또는 custom PRSK provider에서 character catalog와 LiveSD model을 
 ## Requirements
 
 ### Requirement: 명시적 원격 소스 선택
-원격 catalog source는 `provided`와 `custom`이며 resource selector의 초기값은 `provided`여야 한다(MUST). Catalog request는 사용자가 `불러오기`를 실행할 때 시작하고(MUST), model request는 현재 catalog의 검증된 dropdown option을 commit할 때 시작해야 한다(MUST). 페이지 진입과 검색 interaction은 selected source의 idle 또는 현재 request state를 유지해야 한다(MUST).
+원격 catalog source는 `provided`와 `custom`이며 resource selector의 초기값은 `provided`여야 한다(MUST). 새 세션에서는 catalog request가 사용자의 `불러오기` 실행으로 시작되고(MUST), model request는 현재 catalog의 검증된 dropdown option commit으로 시작해야 한다(MUST). 저장 preset에 검증된 원격 provider와 character ID가 있으면 preset 복원 또는 선택이 같은 두 요청을 순서대로 자동 시작해야 한다(MUST). Source 없는 page 진입과 검색 interaction은 selected source의 idle 또는 현재 request state를 유지해야 한다(MUST).
+
+#### Scenario: 저장 원격 preset 자동 요청
+- **WHEN** 사용자가 provided 또는 custom source와 character ID가 저장된 preset을 선택한다
+- **THEN** 시스템은 저장 provider로 catalog를 요청한 뒤 저장 character ID로 model을 요청해야 한다
+- **AND** 별도의 `불러오기` 또는 character dropdown commit을 요구해서는 안 된다
 
 #### Scenario: 초기 provided 화면
 - **WHEN** 사용자가 앱을 열고 원격 동작을 실행하지 않는다
@@ -89,7 +94,7 @@ UI와 문서는 provided character 목록을 불러온 viewer deployment snapsho
 - **THEN** 시스템은 사용자가 commit한 option의 model만 요청한다
 
 ### Requirement: catalog 검증과 검색 가능한 캐릭터 dropdown
-시스템은 catalog option ID가 ASCII 영숫자로 시작하고 ASCII 영숫자, `_`, `-`, `.`만 포함하는 최대 128자 단일 segment인지 검증해야 한다(MUST). label은 1~128자 text로만 렌더링하고, 중복 ID를 거부하며, option을 label과 ID 순서로 안정적으로 정렬해야 한다(MUST). dropdown은 accessible combobox여야 하고(MUST), query는 label 또는 ID의 대소문자 무시 substring match로 visible option만 필터링해야 한다(MUST). query는 선택·catalog·generation·network를 변경해서는 안 된다(MUST NOT).
+시스템은 catalog option ID가 ASCII 영숫자로 시작하고 ASCII 영숫자, `_`, `-`, `.`만 포함하는 최대 128자 단일 segment인지 검증해야 한다(MUST). Label은 Unicode code point 기준 1~128자 text로만 렌더링하고, 중복 ID를 거부해야 한다(MUST). Option은 locale-sensitive comparator 없이 raw label 오름차순, raw ID 오름차순, 원본 index 오름차순으로 안정적으로 정렬해야 한다(MUST). Dropdown은 accessible combobox여야 하고(MUST), query는 label 또는 ID의 대소문자 무시 substring match로 visible option만 필터링해야 한다(MUST). Query는 선택·catalog·generation·network를 변경해서는 안 된다(MUST NOT).
 
 #### Scenario: catalog 로드 전 dropdown
 - **WHEN** provided 또는 custom source에서 유효한 catalog가 준비되지 않았다
@@ -98,6 +103,11 @@ UI와 문서는 provided character 목록을 불러온 viewer deployment snapsho
 #### Scenario: 캐릭터 option 검색
 - **WHEN** `sd_01sample_normal`, `sd_01sample_street`, `sd_mob001`이 있고 사용자가 `SAMPLE`을 검색한다
 - **THEN** 시스템은 앞의 두 option만 표시하고 underlying option·선택을 유지하며 catalog 또는 model 요청을 보내지 않는다
+
+#### Scenario: 선택 캐릭터로 popup 자동 스크롤
+- **WHEN** 현재 선택한 캐릭터가 긴 정렬 목록의 viewport 밖에 있고 사용자가 combobox를 연다
+- **THEN** 시스템은 선택 option을 initial active option으로 표시하고 가장 가까운 listbox scroll 위치로 이동해야 한다
+- **AND** popup open과 scroll은 model request를 시작하지 않아야 한다
 
 #### Scenario: 빈 검색어
 - **WHEN** 사용자가 캐릭터 query를 모두 지운다
@@ -210,7 +220,28 @@ UI와 문서는 provided character 목록을 불러온 viewer deployment snapsho
 - **THEN** 시스템은 기존 preview·animation·두 dropdown의 option·query·selection을 유지하고 새 error만 표시한다
 
 ### Requirement: 구분 가능한 remote source error
-시스템은 provider URL, custom catalog schema·version, viewer entry·record 구조, empty·item limit, selection, HTTP, redirect, CORS/network, timeout, unsafe path, resource limit와 content failure를 stable error code와 현재 locale의 message로 반환해야 한다(MUST). CORS와 일반 network failure는 `REMOTE_NETWORK_OR_CORS`로 함께 표현해야 한다(MUST).
+시스템은 provider URL, custom catalog schema·version, viewer entry·record 구조, empty·item limit, selection, HTTP, redirect, CORS/network, timeout, unsafe path, resource limit와 content failure를 아래 stable error code와 현재 locale의 message로 반환해야 한다(MUST). CORS와 일반 network failure는 `REMOTE_NETWORK_OR_CORS`로 함께 표현해야 한다(MUST).
+
+```text
+REMOTE_ABORTED
+REMOTE_ASSET_URL_INVALID
+REMOTE_ATLAS_PAGE_LIMIT_EXCEEDED
+REMOTE_ATLAS_PAGE_UNSAFE
+REMOTE_CATALOG_EMPTY
+REMOTE_CATALOG_ENTRY_LIMIT_EXCEEDED
+REMOTE_CATALOG_HTTP
+REMOTE_CATALOG_INVALID
+REMOTE_CATALOG_ORIGIN_INVALID
+REMOTE_CATALOG_TOO_LARGE
+REMOTE_CATALOG_VERSION_UNSUPPORTED
+REMOTE_CONTENT_INVALID
+REMOTE_MODEL_HTTP
+REMOTE_NETWORK_OR_CORS
+REMOTE_REDIRECT
+REMOTE_RESOURCE_TOO_LARGE
+REMOTE_SELECTION_INVALID
+REMOTE_TIMEOUT
+```
 
 #### Scenario: viewer entry structure error
 - **WHEN** HTML에서 safe unique hashed main JS를 확정할 수 없다

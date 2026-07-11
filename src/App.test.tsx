@@ -11,6 +11,12 @@ import { StrictMode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { App } from './App'
+import type { CodexPetAnimationMappings } from './features/codex-pet/animationMapping'
+import { CODEX_PET_STATES } from './features/codex-pet/contract'
+import {
+  readCodexPetSettingsPresetCatalog,
+  saveCodexPetSettingsPreset,
+} from './features/codex-pet/settingsPresets'
 import {
   LiveSDPreviewError,
   liveSD36Adapter,
@@ -40,6 +46,7 @@ interface MockSessionFixture {
   readonly dispose: ReturnType<typeof vi.fn>
   readonly emitError: (error: LiveSDPreviewError) => void
   readonly session: LiveSDPreviewSession
+  readonly setAnimationMappings: ReturnType<typeof vi.fn>
   readonly setFramingOffset: ReturnType<typeof vi.fn>
   readonly setFramingScale: ReturnType<typeof vi.fn>
   readonly setLookTarget: ReturnType<typeof vi.fn>
@@ -101,6 +108,7 @@ function createSession(
 ): MockSessionFixture {
   const listeners = new Set<(error: LiveSDPreviewError) => void>()
   const dispose = vi.fn()
+  const setAnimationMappings = vi.fn()
   const setFramingOffset = vi.fn()
   const setFramingScale = vi.fn()
   const setLookTarget = vi.fn()
@@ -120,6 +128,7 @@ function createSession(
     }),
     play: vi.fn(),
     resize: vi.fn(),
+    setAnimationMappings,
     setFramingOffset,
     setFramingScale,
     setLookTarget,
@@ -134,6 +143,7 @@ function createSession(
       }
     },
     session,
+    setAnimationMappings,
     setFramingOffset,
     setFramingScale,
     setLookTarget,
@@ -289,6 +299,233 @@ describe('App', () => {
     expect(createSpy).not.toHaveBeenCalled()
   })
 
+  it('리소스 선택 전에 확정한 preset을 이후 source 전체 설정에 적용한다', async () => {
+    const user = userEvent.setup()
+    const mappings = Object.fromEntries(
+      CODEX_PET_STATES.map(({ id }) => [
+        id,
+        { animationName: 'walk', mirrorX: id === 'running-right' },
+      ]),
+    ) as unknown as CodexPetAnimationMappings
+    saveCodexPetSettingsPreset({
+      description: 'Load this before the source',
+      displayName: 'Miku First',
+      framingOffset: { x: 7, y: 9 },
+      framingScale: 1.24,
+      globalMirrorX: true,
+      lookMovementScale: 1.3,
+      mappings,
+    }, localStorage, 1)
+    saveCodexPetSettingsPreset({
+      description: 'Initially selected preset',
+      displayName: 'Airi First',
+      framingOffset: { x: 0, y: 0 },
+      framingScale: 1,
+      globalMirrorX: false,
+      lookMovementScale: 1,
+      mappings,
+    }, localStorage, 2)
+    const fixture = createSession(
+      '3.6.53',
+      'verified',
+      ['idle', 'walk'],
+      'idle',
+    )
+    const { createSpy } = mockPreview(
+      [createBundle('preset-first-source')],
+      [fixture.session],
+    )
+    const { container } = render(<App />)
+    const presetSelector = screen.getByRole('combobox', {
+      name: '저장 프리셋',
+    })
+    const sourceSelector = screen.getByRole('radio', {
+      name: '기본 제공 리소스',
+    })
+
+    expect(presetSelector).toHaveValue('Airi First')
+    expect(
+      presetSelector.compareDocumentPosition(sourceSelector) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    await user.selectOptions(presetSelector, 'Miku First')
+    expect(
+      readCodexPetSettingsPresetCatalog(localStorage).activePresetName,
+    ).toBe('Miku First')
+    expect(createSpy).not.toHaveBeenCalled()
+
+    await uploadInputs(container, 'preset-first-source.zip')
+    await screen.findByRole('heading', { name: 'preset-first-source' })
+    await waitFor(() =>
+      expect(fixture.setAnimationMappings).toHaveBeenCalled(),
+    )
+
+    expect(presetSelector).toHaveValue('Miku First')
+    expect(screen.getByRole('textbox', { name: 'Pet 이름' })).toHaveValue(
+      'Miku First',
+    )
+    expect(screen.getByRole('textbox', { name: 'Pet 설명' })).toHaveValue(
+      'Load this before the source',
+    )
+    expect(screen.getByRole('slider', {
+      name: '눈 이동량 슬라이더',
+    })).toHaveValue('130')
+    expect(fixture.setFramingScale).toHaveBeenLastCalledWith(1.24)
+    expect(fixture.setFramingOffset).toHaveBeenLastCalledWith({ x: 7, y: 9 })
+    expect(fixture.setAnimationMappings.mock.calls.at(-1)?.[0]).toMatchObject({
+      idle: { animationName: 'walk', mirrorX: false },
+      'running-right': { animationName: 'walk', mirrorX: true },
+    })
+    expect(fixture.setMirrorX).toHaveBeenLastCalledWith(true)
+  })
+
+  it('원격 source가 저장된 preset을 복원하고 변경 즉시 캐릭터를 불러온다', async () => {
+    const user = userEvent.setup()
+    const mappings = Object.fromEntries(
+      CODEX_PET_STATES.map(({ id }) => [
+        id,
+        { animationName: 'walk', mirrorX: id === 'running-right' },
+      ]),
+    ) as unknown as CodexPetAnimationMappings
+    saveCodexPetSettingsPreset({
+      description: 'Miku remote preset',
+      displayName: 'Miku Remote',
+      framingOffset: { x: 6, y: -4 },
+      framingScale: 1.22,
+      globalMirrorX: true,
+      lookMovementScale: 1.35,
+      mappings,
+      source: {
+        provider: 'prsk-chibi-viewer',
+        characterId: 'sd_21miku_normal',
+      },
+    }, localStorage, 1)
+    saveCodexPetSettingsPreset({
+      description: 'Street remote preset',
+      displayName: 'Street Remote',
+      framingOffset: { x: 0, y: 0 },
+      framingScale: 1,
+      globalMirrorX: false,
+      lookMovementScale: 1,
+      mappings,
+      source: {
+        provider: 'prsk-chibi-viewer',
+        characterId: 'sd_21miku_street',
+      },
+    }, localStorage, 2)
+    const catalogDeferred = createDeferred<PrskRemoteCatalog>()
+    const catalog = createRemoteCatalog()
+    const catalogSpy = vi
+      .spyOn(prskRemoteCatalogSource, 'load')
+      .mockReturnValueOnce(catalogDeferred.promise)
+      .mockResolvedValueOnce(catalog)
+    const modelSpy = vi
+      .spyOn(prskRemoteResourceSource, 'load')
+      .mockImplementation(async ({ characterId }) =>
+        createRemoteModel(characterId),
+      )
+    const streetSession = createSession(
+      '3.6.53',
+      'verified',
+      ['idle', 'walk'],
+      'idle',
+    )
+    const mikuSession = createSession(
+      '3.6.53',
+      'verified',
+      ['idle', 'walk'],
+      'idle',
+    )
+    mockPreview([], [streetSession.session, mikuSession.session])
+
+    render(<App />)
+
+    expect(screen.getByTestId('livesd-preview-border-box')).toHaveAttribute(
+      'aria-hidden',
+      'true',
+    )
+    expect(screen.getByText('아직 표시할 캐릭터가 없습니다.')).toBeVisible()
+    catalogDeferred.resolve(catalog)
+    await screen.findByRole('heading', { name: 'sd_21miku_street' })
+    expect(screen.getByTestId('livesd-preview-border-box')).toBeVisible()
+    expect(catalogSpy).toHaveBeenCalledTimes(1)
+    expect(modelSpy).toHaveBeenLastCalledWith(expect.objectContaining({
+      characterId: 'sd_21miku_street',
+    }))
+
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: '저장 프리셋' }),
+      'Miku Remote',
+    )
+
+    await screen.findByRole('heading', { name: 'sd_21miku_normal' })
+    expect(catalogSpy).toHaveBeenCalledTimes(2)
+    expect(modelSpy).toHaveBeenLastCalledWith(expect.objectContaining({
+      characterId: 'sd_21miku_normal',
+    }))
+    expect(screen.getByRole('textbox', { name: 'Pet 이름' })).toHaveValue(
+      'Miku Remote',
+    )
+    expect(screen.getByRole('slider', {
+      name: '눈 이동량 슬라이더',
+    })).toHaveValue('135')
+    expect(mikuSession.setFramingScale).toHaveBeenLastCalledWith(1.22)
+    expect(mikuSession.setFramingOffset).toHaveBeenLastCalledWith({
+      x: 6,
+      y: -4,
+    })
+    expect(mikuSession.setMirrorX).toHaveBeenLastCalledWith(true)
+  })
+
+  it('원격 preset 자동 로드 중 새 세션을 선택하면 이전 요청을 취소한다', async () => {
+    const user = userEvent.setup()
+    const catalogDeferred = createDeferred<PrskRemoteCatalog>()
+    const mappings = Object.fromEntries(
+      CODEX_PET_STATES.map(({ id }) => [
+        id,
+        { animationName: 'walk', mirrorX: id === 'running-right' },
+      ]),
+    ) as unknown as CodexPetAnimationMappings
+    saveCodexPetSettingsPreset({
+      description: '',
+      displayName: 'Pending Remote',
+      framingOffset: { x: 0, y: 0 },
+      framingScale: 1,
+      globalMirrorX: false,
+      lookMovementScale: 1,
+      mappings,
+      source: {
+        provider: 'prsk-chibi-viewer',
+        characterId: 'sd_21miku_normal',
+      },
+    }, localStorage, 1)
+    const catalogSpy = vi
+      .spyOn(prskRemoteCatalogSource, 'load')
+      .mockReturnValue(catalogDeferred.promise)
+    const modelSpy = vi.spyOn(prskRemoteResourceSource, 'load')
+    const createSpy = vi.spyOn(liveSD36Adapter, 'createPreview')
+
+    render(<App />)
+    await waitFor(() => expect(catalogSpy).toHaveBeenCalledOnce())
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: '저장 프리셋' }),
+      '',
+    )
+    catalogDeferred.resolve(createRemoteCatalog())
+
+    await waitFor(() =>
+      expect(
+        readCodexPetSettingsPresetCatalog(localStorage).activePresetName,
+      ).toBeNull(),
+    )
+    expect(modelSpy).not.toHaveBeenCalled()
+    expect(createSpy).not.toHaveBeenCalled()
+    expect(screen.getByTestId('livesd-preview-border-box')).toHaveAttribute(
+      'aria-hidden',
+      'true',
+    )
+  })
+
   it('기본 제공 resource는 단일 불러오기 action으로 canonical catalog를 요청한다', async () => {
     const user = userEvent.setup()
     const catalogSpy = vi
@@ -335,9 +572,11 @@ describe('App', () => {
       screen.getByRole('tab', { name: /BanG Dream!.*준비중/ }),
     ).toBeDisabled()
     expect(screen.getByText('prsk-chibi-viewer manifest')).toBeVisible()
-    expect(screen.getByTestId('livesd-preview-border-box')).toHaveTextContent(
-      'LiveSD 출력 · 192 × 208',
+    expect(screen.getByTestId('livesd-preview-border-box')).toHaveAttribute(
+      'aria-hidden',
+      'true',
     )
+    expect(screen.getByText('아직 표시할 캐릭터가 없습니다.')).toBeVisible()
     expect(
       screen.getByRole('slider', { name: 'Pet 크기 슬라이더' }),
     ).toHaveValue('100')
@@ -532,6 +771,13 @@ describe('App', () => {
     const { container } = render(<App />)
     await uploadInputs(container)
     await screen.findByRole('heading', { name: 'interactive-preview' })
+    await waitFor(() =>
+      expect(fixture.setAnimationMappings).toHaveBeenCalled(),
+    )
+    expect(fixture.setAnimationMappings.mock.calls.at(-1)?.[0]).toMatchObject({
+      idle: { animationName: 'w_happy_idle01_f' },
+      'running-right': { animationName: 'w_normal_walk01_f' },
+    })
 
     const idleShortcut = screen.getByRole('button', {
       name: /대기 미리보기: 차분한 호흡과 눈 깜박임/,
@@ -554,6 +800,9 @@ describe('App', () => {
     await user.click(screen.getByRole('option', {
       name: 'w_normal_walk01_f',
     }))
+    expect(fixture.setAnimationMappings.mock.calls.at(-1)?.[0]).toMatchObject({
+      idle: { animationName: 'w_normal_walk01_f' },
+    })
     expect(fixture.session.play).toHaveBeenLastCalledWith('w_normal_walk01_f')
     expect(screen.getByText('w_normal_walk01_f', {
       selector: '.preview-meta span',

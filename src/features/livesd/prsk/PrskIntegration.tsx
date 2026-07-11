@@ -76,6 +76,11 @@ import {
 import type { CodexPetStateId } from '../../codex-pet/contract'
 import { CODEX_PET_LOOK_MOVEMENT_SCALE_DEFAULT } from '../../codex-pet/lookMovementScale'
 import type { CodexPetRecipeSource } from '../../codex-pet/recipe'
+import {
+  readCodexPetSettingsPresetCatalog,
+  selectCodexPetSettingsPreset,
+  type CodexPetSettingsPresetCatalog,
+} from '../../codex-pet/settingsPresets'
 import { toPrskPreviewUiNotice } from './previewError'
 
 const DEVELOPMENT_DEFAULTS_ENABLED =
@@ -100,6 +105,15 @@ interface PreviewViewModel {
   readonly currentAnimation: string
   readonly sourceName: string
   readonly version: string
+}
+
+function recipeSourceKey(source: CodexPetRecipeSource | null | undefined): string {
+  if (!source) {
+    return ''
+  }
+  return source.provider === 'custom'
+    ? `${source.provider}:${source.assetBaseUrl}:${source.characterId}`
+    : `${source.provider}:${source.characterId}`
 }
 
 export interface ActiveLiveSDSource {
@@ -152,6 +166,10 @@ export function PrskIntegration() {
 
   const [resourceSource, setResourceSource] =
     useState<PrskResourceSource>('provided')
+  const [presetCatalog, setPresetCatalog] =
+    useState<CodexPetSettingsPresetCatalog>(() =>
+      readCodexPetSettingsPresetCatalog(),
+    )
   const [archiveFile, setArchiveFile] = useState<File | null>(null)
   const [skeletonFile, setSkeletonFile] = useState<File | null>(null)
   const [localBusy, setLocalBusy] = useState(false)
@@ -186,6 +204,13 @@ export function PrskIntegration() {
     phase: 'idle',
     messageKey: 'prsk.status.providedSelected',
   })
+
+  const activePreset = presetCatalog.activePresetName
+    ? presetCatalog.presets[presetCatalog.activePresetName]
+    : undefined
+  const activePresetSource = activePreset?.source ?? null
+  const activePresetSourceKey = recipeSourceKey(activePresetSource)
+  const activeSourceKey = recipeSourceKey(activeSource?.recipeSource)
 
   const characterOptions = useMemo<readonly SearchableComboboxOption[]>(
     () =>
@@ -710,6 +735,195 @@ export function PrskIntegration() {
     }
   }, [activateSession, remoteCatalog, resourceSource, toNotice])
 
+  const loadPresetRemoteSource = useCallback(async (
+    recipeSource: CodexPetRecipeSource,
+  ) => {
+    const canvas = canvasRef.current
+    if (!canvas) {
+      return
+    }
+
+    let provider
+    try {
+      provider = resolvePrskRemoteProvider(
+        recipeSource.provider === 'prsk-chibi-viewer'
+          ? { kind: 'prsk-chibi-viewer' }
+          : {
+              kind: 'custom',
+              assetBaseUrl: recipeSource.assetBaseUrl,
+            },
+        { development: import.meta.env.DEV },
+      )
+    } catch (caughtError) {
+      const notice = toNotice(caughtError)
+      setCatalogPhase('error')
+      setCatalogError(notice)
+      setError(notice)
+      setStatus({ phase: 'error', messageKey: 'prsk.status.error' })
+      return
+    }
+
+    abortRemoteRequests()
+    const catalogController = new AbortController()
+    catalogRequestRef.current = catalogController
+    const catalogGeneration = catalogGenerationRef.current + 1
+    catalogGenerationRef.current = catalogGeneration
+    modelGenerationRef.current += 1
+    const operationGeneration = previewGenerationRef.current + 1
+    previewGenerationRef.current = operationGeneration
+    const nextResourceSource =
+      recipeSource.provider === 'prsk-chibi-viewer' ? 'provided' : 'custom'
+
+    setResourceSource(nextResourceSource)
+    setRemoteBaseUrl(
+      recipeSource.provider === 'custom' ? recipeSource.assetBaseUrl : '',
+    )
+    setRemoteCatalog(null)
+    setSelectedCharacterId(null)
+    setCatalogPhase('loading')
+    setCatalogError(null)
+    setRemoteModelBusy(false)
+    setCharacterQueryResetKey((key) => key + 1)
+    setError(null)
+    setStatus({ phase: 'loading', messageKey: 'prsk.status.loadCatalog' })
+
+    let modelController: AbortController | null = null
+    let modelGeneration = modelGenerationRef.current
+    try {
+      const catalog = await prskRemoteCatalogSource.load({
+        provider,
+        signal: catalogController.signal,
+      })
+      if (
+        !mountedRef.current ||
+        catalogController.signal.aborted ||
+        catalogGenerationRef.current !== catalogGeneration ||
+        previewGenerationRef.current !== operationGeneration
+      ) {
+        return
+      }
+
+      if (catalogRequestRef.current === catalogController) {
+        catalogRequestRef.current = null
+      }
+      setRemoteCatalog(catalog)
+      setSelectedCharacterId(recipeSource.characterId)
+      setCatalogPhase('ready')
+      setCharacterQueryResetKey((key) => key + 1)
+      setStatus({
+        phase: 'loading',
+        messageKey: 'prsk.status.loadModel',
+        values: { character: recipeSource.characterId },
+      })
+
+      modelController = new AbortController()
+      modelRequestRef.current = modelController
+      modelGeneration = modelGenerationRef.current + 1
+      modelGenerationRef.current = modelGeneration
+      setRemoteModelBusy(true)
+      const input = await prskRemoteResourceSource.load({
+        catalog,
+        characterId: recipeSource.characterId,
+        signal: modelController.signal,
+      })
+      if (
+        !mountedRef.current ||
+        modelController.signal.aborted ||
+        modelGenerationRef.current !== modelGeneration ||
+        previewGenerationRef.current !== operationGeneration
+      ) {
+        return
+      }
+
+      liveSD36Adapter.inspectSkeleton(input.skeletonData)
+      setStatus({
+        phase: 'loading',
+        messageKey: 'prsk.status.parseSkeleton',
+        values: { character: recipeSource.characterId },
+      })
+      const nextSession = await liveSD36Adapter.createPreview({
+        atlasBundle: input.atlasBundle,
+        canvas,
+        skeletonData: input.skeletonData,
+      })
+      const activated = activateSession(
+        nextSession,
+        {
+          atlasBundle: input.atlasBundle,
+          recipeSource,
+          skeletonData: input.skeletonData,
+        },
+        operationGeneration,
+      )
+      if (activated) {
+        setSelectedCharacterId(recipeSource.characterId)
+        setCharacterQueryResetKey((key) => key + 1)
+      }
+    } catch (caughtError) {
+      if (
+        !mountedRef.current ||
+        catalogController.signal.aborted ||
+        modelController?.signal.aborted ||
+        catalogGenerationRef.current !== catalogGeneration ||
+        previewGenerationRef.current !== operationGeneration
+      ) {
+        return
+      }
+
+      const notice = toNotice(caughtError)
+      setCatalogPhase(modelController ? 'ready' : 'error')
+      setCatalogError(modelController ? null : notice)
+      setError(notice)
+      setStatus({ phase: 'error', messageKey: 'prsk.status.error' })
+    } finally {
+      if (catalogRequestRef.current === catalogController) {
+        catalogRequestRef.current = null
+      }
+      if (modelController && modelRequestRef.current === modelController) {
+        modelRequestRef.current = null
+      }
+      if (
+        mountedRef.current &&
+        modelGenerationRef.current === modelGeneration
+      ) {
+        setRemoteModelBusy(false)
+      }
+    }
+  }, [abortRemoteRequests, activateSession, toNotice])
+
+  useEffect(() => {
+    if (
+      !activePresetSource ||
+      !activePresetSourceKey ||
+      activePresetSourceKey === activeSourceKey
+    ) {
+      return
+    }
+    const loadTimer = window.setTimeout(() => {
+      void loadPresetRemoteSource(activePresetSource)
+    }, 0)
+    return () => window.clearTimeout(loadTimer)
+  }, [
+    activePresetSource,
+    activePresetSourceKey,
+    activeSourceKey,
+    loadPresetRemoteSource,
+  ])
+
+  const handlePresetSelectionChange = useCallback((
+    presetName: string | null,
+  ) => {
+    abortRemoteRequests()
+    catalogGenerationRef.current += 1
+    modelGenerationRef.current += 1
+    previewGenerationRef.current += 1
+    setCatalogPhase((current) =>
+      current === 'loading' ? (remoteCatalog ? 'ready' : 'idle') : current,
+    )
+    setRemoteModelBusy(false)
+    setPresetCatalog(selectCodexPetSettingsPreset(presetName))
+  }, [abortRemoteRequests, remoteCatalog])
+
   const handleLocalPreview = () => {
     if (localBusy || resourceSource !== 'upload') {
       return
@@ -753,6 +967,17 @@ export function PrskIntegration() {
   ) => {
     codexPetMappingsRef.current = mappings
     setCodexPetMappings(mappings)
+    if (mappings && sessionRef.current) {
+      try {
+        sessionRef.current.setAnimationMappings(mappings)
+        setError(null)
+      } catch (caughtError) {
+        const notice = toNotice(caughtError)
+        setError(notice)
+        setStatus({ phase: 'error', messageKey: 'prsk.status.error' })
+        return
+      }
+    }
     const stateId = activePreviewStateIdRef.current
     if (!mappings || !stateId) {
       return
@@ -761,7 +986,7 @@ export function PrskIntegration() {
       codexPetGlobalMirrorXRef.current,
       mappings[stateId].mirrorX,
     ))
-  }, [applyPreviewMirrorX])
+  }, [applyPreviewMirrorX, toNotice])
 
   const handleGlobalMirrorXChange = useCallback((globalMirrorX: boolean) => {
     codexPetGlobalMirrorXRef.current = globalMirrorX
@@ -913,9 +1138,36 @@ export function PrskIntegration() {
     <>
       <div className="workspace-grid">
         <aside className="control-panel" aria-label={t('prsk.modelImport')}>
-          <section className="panel-section source-mode-section">
+          <section className="panel-section preset-selection-section">
             <div className="step-heading">
               <span>00</span>
+              <div>
+                <h2>{t('builder.preset')}</h2>
+                <p>{t('prsk.presetDescription')}</p>
+              </div>
+            </div>
+            <label className="codex-pet-preset-selector resource-preset-selector">
+              <span>{t('builder.preset')}</span>
+              <select
+                data-testid="resource-preset-selector"
+                onChange={(event) =>
+                  handlePresetSelectionChange(event.target.value || null)
+                }
+                value={presetCatalog.activePresetName ?? ''}
+              >
+                <option value="">{t('builder.newSession')}</option>
+                {Object.keys(presetCatalog.presets).map((presetName) => (
+                  <option key={presetName} value={presetName}>
+                    {presetName}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </section>
+
+          <section className="panel-section source-mode-section">
+            <div className="step-heading">
+              <span>01</span>
               <div>
                 <h2>{t('prsk.inputSource')}</h2>
                 <p>{t('prsk.inputSourceDescription')}</p>
@@ -963,7 +1215,7 @@ export function PrskIntegration() {
             <>
               <section className="panel-section">
                 <div className="step-heading">
-                  <span>01</span>
+                  <span>02</span>
                   <div>
                     <h2>{t('prsk.sharedSkeleton')}</h2>
                     <p>{t('prsk.sharedSkeletonDescription')}</p>
@@ -1000,7 +1252,7 @@ export function PrskIntegration() {
 
               <section className="panel-section">
                 <div className="step-heading">
-                  <span>02</span>
+                  <span>03</span>
                   <div>
                     <h2>{t('prsk.characterZip')}</h2>
                     <p>{t('prsk.characterZipDescription')}</p>
@@ -1050,7 +1302,7 @@ export function PrskIntegration() {
             <>
               <section className="panel-section">
                 <div className="step-heading">
-                  <span>01</span>
+                  <span>02</span>
                   <div>
                     <h2>{t('prsk.resourceServer')}</h2>
                     <p>{t('prsk.resourceServerDescription')}</p>
@@ -1105,7 +1357,7 @@ export function PrskIntegration() {
 
               <section className="panel-section remote-character-section">
                 <div className="step-heading">
-                  <span>02</span>
+                  <span>03</span>
                   <div>
                     <h2>{t('prsk.character')}</h2>
                     <p>{t('prsk.characterDescription')}</p>
@@ -1283,7 +1535,10 @@ export function PrskIntegration() {
 
           <div className="preview-stage">
             <div
-              className="livesd-preview-border-box"
+              aria-hidden={!preview}
+              className={`livesd-preview-border-box${
+                preview ? '' : ' livesd-preview-border-box--empty'
+              }`}
               data-testid="livesd-preview-border-box"
               ref={previewFrameRef}
             >
@@ -1319,11 +1574,13 @@ export function PrskIntegration() {
           onFramingChange={applyBuilderFraming}
           onGlobalMirrorXChange={handleGlobalMirrorXChange}
           onMappingsChange={handleMappingsChange}
+          onPresetCatalogChange={setPresetCatalog}
           onPreviewAnimationChange={playStateAnimation}
           onPreviewLookMovementScaleChange={
             updatePreviewLookMovementScale
           }
           recipeSource={activeSource?.recipeSource ?? null}
+          presetCatalog={presetCatalog}
           source={activeSource}
         />
       </div>

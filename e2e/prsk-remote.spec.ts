@@ -272,7 +272,9 @@ test('custom catalog 상태와 searchable character combobox를 ARIA keyboard로
   expect(remoteRequests).toEqual([CUSTOM_CATALOG_URL])
 
   await characterPicker.fill('')
-  await expect(page.getByRole('option')).toHaveText([
+  await expect(
+    page.locator('.character-combobox').getByRole('option'),
+  ).toHaveText([
     'Mob Character',
     'Night Miku',
     'Street Miku',
@@ -332,7 +334,9 @@ test('기본 prsk-chibi-viewer resource는 불러오기 뒤 intercepted HTML과 
   ])
 
   await characterPicker.click()
-  await expect(page.getByRole('option')).toHaveText([
+  await expect(
+    page.locator('.character-combobox').getByRole('option'),
+  ).toHaveText([
     'sd_alpha',
     'sd_mob003',
   ])

@@ -341,6 +341,10 @@ describe('CodexPetBuilder', () => {
         defaultStateMirrorX={prskDefaultStateMirrorX}
         framingOffset={{ x: 9, y: -4 }}
         framingScale={1.25}
+        recipeSource={{
+          provider: 'prsk-chibi-viewer',
+          characterId: 'sd_21miku_normal',
+        }}
         services={firstServices}
         source={source}
       />,
@@ -375,6 +379,13 @@ describe('CodexPetBuilder', () => {
     )
     expect(stored).not.toContain('sample_character.zip')
     expect(stored).not.toContain('blob:test-package')
+    expect(
+      readCodexPetSettingsPresetCatalog(localStorage)
+        .presets['Miku Preset']?.source,
+    ).toEqual({
+      provider: 'prsk-chibi-viewer',
+      characterId: 'sd_21miku_normal',
+    })
     firstRender.unmount()
 
     const onFramingChange = vi.fn()

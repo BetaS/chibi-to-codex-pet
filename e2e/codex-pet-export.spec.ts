@@ -954,8 +954,12 @@ for (const character of CHARACTER_CASES) {
         'globalMirrorX',
         'lookMovementScale',
         'mappings',
+        'source',
         'updatedAt',
       ])
+      expect(
+        storedCatalog?.presets[character.displayName]?.source,
+      ).toBeNull()
 
       const explicitInstallRoot = process.env.CODEX_PET_INSTALL_ROOT?.trim()
       const isolatedPetsRoot =
