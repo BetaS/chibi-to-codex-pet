@@ -1,0 +1,4 @@
+interface:
+  display_name: "ngrok Tunnel"
+  short_description: "Start and verify a local ngrok development tunnel"
+  default_prompt: "Use $ngrok-tunnel to expose this local app through ngrok and report the verified public URL."

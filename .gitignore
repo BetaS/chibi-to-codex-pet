@@ -1,0 +1,15 @@
+/assets/
+/public/assets
+/coverage/
+/dist/
+/node_modules/
+/packages/*/node_modules/
+/.pnpm-store/
+/.npm-cache/
+/playwright-report/
+/test-results/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+/.openai/hosting.json

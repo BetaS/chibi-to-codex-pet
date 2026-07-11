@@ -1,0 +1,35 @@
+{
+  "name": "chibi-to-codex-pet",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "description": "Install Codex Pet v2 payloads from LiveSD recipe commands.",
+  "bin": {
+    "chibi-to-codex-pet": "dist/cli.js"
+  },
+  "files": [
+    "LICENSE",
+    "dist",
+    "renderer",
+    "package.json",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "scripts": {
+    "build": "pnpm build:cli && pnpm build:renderer",
+    "build:cli": "vite build --config vite.cli.config.ts && node scripts/makeCliExecutable.mjs",
+    "build:renderer": "vite build --config vite.renderer.config.ts",
+    "test": "vitest run --config vitest.config.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit --pretty false",
+    "verify:pack": "node scripts/verifyPack.mjs"
+  },
+  "dependencies": {
+    "playwright-core": "1.61.1"
+  }
+}

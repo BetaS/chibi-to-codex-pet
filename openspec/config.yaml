@@ -1,0 +1,13 @@
+schema: spec-driven
+
+context: |
+  모든 OpenSpec 산출물(제안서, 설계, 명세, 작업 목록)은 한국어로 작성한다.
+  코드 식별자, API 이름, 파일 경로, 명령어 등 정확성을 위해 필요한 기술 표기는 원문을 유지할 수 있다.
+  프로젝트 용어에서 LiveSD는 Spine 계열 모델, 런타임, 가져오기 및 관련 지원을 뜻한다.
+  프로젝트 용어에서 Live2D는 Cubism 계열 모델, 런타임, 가져오기 및 관련 지원을 뜻한다.
+  제품 기능과 로드맵에는 LiveSD와 Live2D를 사용한다.
+  파일 형식, 라이브러리, 버전, 라이선스의 공식 명칭을 특정할 때는 "LiveSD (Spine 3.6)" 또는 "Live2D (Cubism)"처럼 병기할 수 있다.
+  main spec은 현재 제품 계약만 설명하고 결정 과정, 선택되지 않은 대안과 일회성 migration 이력은 archive에 둔다.
+  Purpose에는 capability의 사용자 가치와 결과를, Requirement에는 검증 가능한 규범을, Scenario에는 관찰 가능한 입력과 결과를 쓴다.
+  부정형 비교보다 허용 범위와 성공 조건을 먼저 정의하며, 보안·개인정보·무결성 제한은 실패 결과와 함께 유지한다.
+  캐릭터별 회귀 사례는 renderer 전체에 적용되는 제품 품질 계약으로 일반화하고 구체적인 fixture는 test 또는 archive에 둔다.
