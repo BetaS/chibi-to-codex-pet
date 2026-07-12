@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "gameId": "garupa",
+  "assetFamily": "sdchara",
+  "repository": "https://github.com/panxuc/bangdream-live2d",
+  "sourceRevision": "15b3e023cfdc576212f8b3a6b001c9f26e755f23",
+  "commitDate": "2026-07-08T01:26:44Z",
+  "auditedAt": "2026-07-11T00:00:00Z",
+  "upstream": "Bestdori",
+  "sourceRegions": ["jp", "cn"],
+  "supportedRegion": "jp",
+  "regionSemantics": "jp-preferred-union",
+  "licenseStatus": "not-declared",
+  "localBackupPolicy": "private-unserved-untracked",
+  "inventory": {
+    "files": 2940,
+    "bytes": 41262422,
+    "sha256InventorySha256": "9c649a1576cec0c5bd2448e9428411badc588b61ffe84adb36e399a02fe1c49d",
+    "fileMetadataSha256": "c7f677cb0cbdc25e7f98e2ab7ac18c60e5746c996c16b0af86a16fac05f07a6d"
+  },
+  "catalogs": {
+    "assetIndex": {
+      "path": "sdchara/_info.json",
+      "bytes": 264288,
+      "sha256": "bbbfa18d864c80b6d4464b3ec0f15cafad1a327e1bf265db474b80274567bea9"
+    },
+    "characters": {
+      "path": "data/characters.all.5.json",
+      "bytes": 539308,
+      "sha256": "5e154d5f03b74e18b6e0eb994eb83dbe48f51f52726461360e3d17bf5839c6db"
+    },
+    "costumes": {
+      "path": "data/costumes.all.5.json",
+      "bytes": 656784,
+      "sha256": "ab1f462e936bd893cf061ef4d2eee7c7e17224a8eeb5d0c109077942cde14682"
+    }
+  },
+  "representativeFixture": {
+    "id": "00001-s000_templete",
+    "spineVersion": "4.0.64",
+    "canonicalFiles": {
+      "model/s000_templete.skel": "1b4de69f9f2ddcfb1ba7b3a000fbbaaa42b685e86fda4b3f248011ee84ca385f",
+      "costume/u000_templete.atlas": "b4a5f30486dc55ee43e8704cb3b801075e2bb566af53099af1583be13cfdcb6b",
+      "costume/u000_templete.png": "ccb1a04d1b51b920d0e12193716160cfd50f79aad0bca9610ea082cebbbe9cd4"
+    },
+    "packManifestSha256": "9ceb0a645f0132133ffeb770f939f8e62da3908b99d4f43b40073c03051e2364",
+    "canonicalZipBytes": 462200,
+    "canonicalZipSha256": "e2eb5f329e89b751808bb897e2261e33f93d9d5c6e583c32b2521d289a9e2eb8"
+  }
+}

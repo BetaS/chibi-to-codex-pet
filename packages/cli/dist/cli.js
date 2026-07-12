@@ -131,18 +131,18 @@ var CODEX_PET_STATES = [
 ];
 CODEX_PET_STATES.reduce((total, state) => total + state.frameCount, 0) + 16;
 //#endregion
-//#region src/features/livesd/rendering/framingScale.ts
+//#region ../../src/features/livesd/rendering/framingScale.ts
 var LIVE_SD_FRAMING_SCALE_MIN = .8;
 var LIVE_SD_FRAMING_SCALE_MAX = 1.5;
 //#endregion
-//#region src/features/livesd/rendering/framingOffset.ts
+//#region ../../src/features/livesd/rendering/framingOffset.ts
 var LIVE_SD_FRAMING_OFFSET_Y_MIN = -104;
 var LIVE_SD_FRAMING_OFFSET_DEFAULT = Object.freeze({
 	x: 0,
 	y: 0
 });
 //#endregion
-//#region src/features/codex-pet/lookMovementScale.ts
+//#region ../../src/features/codex-pet/lookMovementScale.ts
 var CODEX_PET_LOOK_MOVEMENT_SCALE_MIN = .5;
 var CODEX_PET_LOOK_MOVEMENT_SCALE_MAX = 1.5;
 var CODEX_PET_RECIPE_KIND = "livesd-recipe";
@@ -241,7 +241,7 @@ function parseCharacterId(value) {
 	if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(characterId)) recipeError("source.characterId는 안전한 원격 캐릭터 ID여야 합니다.");
 	return characterId;
 }
-function parseSource(value) {
+function parseCodexPetRecipeSource(value) {
 	const source = assertRecord(value, "source");
 	assertNoForbiddenBinaryKeys(source);
 	const provider = source.provider;
@@ -305,7 +305,7 @@ function parseCodexPetRecipe(value) {
 		kind: CODEX_PET_RECIPE_KIND,
 		renderer: CODEX_PET_RECIPE_RENDERER,
 		globalMirrorX: parseOptionalBoolean(recipe.globalMirrorX, "globalMirrorX"),
-		source: parseSource(recipe.source),
+		source: parseCodexPetRecipeSource(recipe.source),
 		pet: parsePet(recipe.pet),
 		mappings: parseMappings(recipe.mappings)
 	};
@@ -339,7 +339,7 @@ function isSafeCodexPetId(value) {
 	return SAFE_PET_ID.test(value);
 }
 //#endregion
-//#region packages/cli/src/cli.ts
+//#region src/cli.ts
 var CLI_VERSION = "0.1.0";
 var PACKAGE_NAME = "chibi-to-codex-pet";
 var BIN_NAME = "chibi-to-codex-pet";

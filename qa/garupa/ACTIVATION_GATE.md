@@ -1,0 +1,7 @@
+# Garupa activation gate
+
+This change implements and validates the Garupa Spine `sdchara` foundation and activates the `garupa` game source on the current feature branch. The registry entry is `available`, uses the public `GarupaSourceIntegration`, and is identical in development and production builds.
+
+The pinned representative fixture passed Spine 4.0 parsing, a visible straight-alpha first frame, the actual animation catalog and 9-state mapping, paired-eye 16-direction look sampling, deterministic 73-frame packaging, independent PNG/cell validation, and installed-preview decoding. The 15-family private fixture matrix parsed successfully; nine paired-eye families are export-capable and six cat families are explicitly preview-only because they do not provide the required paired-eye bones. Results and hashes are recorded in `qa/garupa/compatibility/spine40-15b3e023.json`; no original asset bytes are tracked.
+
+The user confirmed that the integrating project has the applicable runtime rights and approved public preview plus production artifact inclusion on this feature branch. The official Spine 4.0.31 runtime is therefore bundled as a lazy production dependency with its original license and copyright notice. Release and push still require a separate instruction, and the pinned provider continues to disclose its undeclared BanG Dream! asset-data license. No original asset bytes are included in the repository or production artifacts.

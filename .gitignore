@@ -1,5 +1,6 @@
 /assets/
 /public/assets
+/.debug-fixtures/
 /coverage/
 /dist/
 /node_modules/

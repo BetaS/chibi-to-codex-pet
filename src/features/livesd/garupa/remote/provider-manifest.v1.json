@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "id": "panxuc-bangdream-live2d",
+  "status": "experimental",
+  "gameId": "garupa",
+  "assetFamily": "sdchara",
+  "label": "bangdream-live2d pinned snapshot",
+  "repository": {
+    "url": "https://github.com/panxuc/bangdream-live2d",
+    "branch": "live2d",
+    "sourceRevision": "15b3e023cfdc576212f8b3a6b001c9f26e755f23",
+    "commitUrl": "https://github.com/panxuc/bangdream-live2d/commit/15b3e023cfdc576212f8b3a6b001c9f26e755f23"
+  },
+  "delivery": {
+    "kind": "jsdelivr-github",
+    "baseUrl": "https://cdn.jsdelivr.net/gh/panxuc/bangdream-live2d@15b3e023cfdc576212f8b3a6b001c9f26e755f23",
+    "requestOrigin": "https://cdn.jsdelivr.net",
+    "requestPolicy": {
+      "mode": "cors",
+      "credentials": "omit",
+      "referrerPolicy": "no-referrer",
+      "redirect": "error",
+      "range": "forbidden"
+    }
+  },
+  "catalogs": {
+    "assetIndex": {
+      "path": "sdchara/_info.json",
+      "bytes": 264288,
+      "sha256": "bbbfa18d864c80b6d4464b3ec0f15cafad1a327e1bf265db474b80274567bea9"
+    },
+    "characters": {
+      "path": "data/characters.all.5.json",
+      "bytes": 539308,
+      "sha256": "5e154d5f03b74e18b6e0eb994eb83dbe48f51f52726461360e3d17bf5839c6db"
+    },
+    "costumes": {
+      "path": "data/costumes.all.5.json",
+      "bytes": 656784,
+      "sha256": "ab1f462e936bd893cf061ef4d2eee7c7e17224a8eeb5d0c109077942cde14682"
+    }
+  },
+  "sourceRegions": ["jp", "cn"],
+  "supportedRegion": "jp",
+  "regionSemantics": "jp-preferred-union",
+  "expectedRuntimeProfile": "spine-4.0",
+  "licenseStatus": "not-declared",
+  "upstream": "Bestdori",
+  "approvedAt": "2026-07-11T00:00:00Z",
+  "debugFixture": {
+    "id": "00001-s000_templete",
+    "sdAssetBundleName": "00001",
+    "modelName": "s000_templete",
+    "files": [
+      {
+        "role": "buildData",
+        "sourcePath": "sdchara/builddata_rip/assets-star-forassetbundle-startapp-sdchara-builddata-00001-builddata.asset",
+        "canonicalPath": null,
+        "bytes": 377,
+        "sha256": "bda0e41031f0b95c37ebd5d051da88b04f895f80771ce2259bc9cd90ff83adaa"
+      },
+      {
+        "role": "skeleton",
+        "sourcePath": "sdchara/model/s000_templete_rip/s000_templete.skel",
+        "canonicalPath": "model/s000_templete.skel",
+        "bytes": 2215462,
+        "sha256": "1b4de69f9f2ddcfb1ba7b3a000fbbaaa42b685e86fda4b3f248011ee84ca385f"
+      },
+      {
+        "role": "atlas",
+        "sourcePath": "sdchara/builddata_rip/assets-star-forassetbundle-startapp-sdchara-builddata-00001-u000_templete.atlas.txt",
+        "canonicalPath": "costume/u000_templete.atlas",
+        "bytes": 3479,
+        "sha256": "b4a5f30486dc55ee43e8704cb3b801075e2bb566af53099af1583be13cfdcb6b"
+      },
+      {
+        "role": "png",
+        "sourcePath": "sdchara/builddata_rip/assets-star-forassetbundle-startapp-sdchara-builddata-00001-u000_templete.png",
+        "canonicalPath": "costume/u000_templete.png",
+        "bytes": 29611,
+        "sha256": "ccb1a04d1b51b920d0e12193716160cfd50f79aad0bca9610ea082cebbbe9cd4"
+      }
+    ]
+  }
+}

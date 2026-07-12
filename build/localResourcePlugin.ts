@@ -5,6 +5,14 @@ import type { Plugin } from 'vite'
 
 const RUNTIME_PUBLIC_ROOT = '/vendor/estertion-spine-3.6'
 const RUNTIME_OUTPUT_ROOT = 'vendor/estertion-spine-3.6'
+const SPINE_40_NOTICE_PUBLIC_ROOT =
+  '/vendor/esotericsoftware-spine-4.0.31'
+const SPINE_40_NOTICE_OUTPUT_ROOT =
+  'vendor/esotericsoftware-spine-4.0.31'
+const GARUPA_PROVIDER_PUBLIC_PATH =
+  '/manifests/garupa/bangdream-live2d.v1.json'
+const GARUPA_PROVIDER_OUTPUT_PATH =
+  'manifests/garupa/bangdream-live2d.v1.json'
 
 interface StaticResource {
   contentType: string
@@ -41,11 +49,20 @@ function requestPath(request: IncomingMessage): string | null {
 }
 
 export function localResourcePlugin(repositoryRoot: string): Plugin {
+  let basePath = '/'
   const runtimeRoot = resolve(
     repositoryRoot,
     'third_party/estertion-spine-3.6',
   )
   const noticesPath = resolve(repositoryRoot, 'THIRD_PARTY_NOTICES.md')
+  const spine40LicensePath = resolve(
+    repositoryRoot,
+    'third_party/esotericsoftware-spine-4.0.31/LICENSE',
+  )
+  const garupaProviderManifestPath = resolve(
+    repositoryRoot,
+    'src/features/livesd/garupa/remote/provider-manifest.v1.json',
+  )
   const resources: StaticResource[] = [
     {
       publicPath: `${RUNTIME_PUBLIC_ROOT}/spine-webgl.js`,
@@ -65,10 +82,31 @@ export function localResourcePlugin(repositoryRoot: string): Plugin {
       outputName: `${RUNTIME_OUTPUT_ROOT}/THIRD_PARTY_NOTICES.md`,
       contentType: 'text/markdown; charset=utf-8',
     },
+    {
+      publicPath: `${SPINE_40_NOTICE_PUBLIC_ROOT}/LICENSE`,
+      fileName: spine40LicensePath,
+      outputName: `${SPINE_40_NOTICE_OUTPUT_ROOT}/LICENSE`,
+      contentType: 'text/plain; charset=utf-8',
+    },
+    {
+      publicPath: `${SPINE_40_NOTICE_PUBLIC_ROOT}/THIRD_PARTY_NOTICES.md`,
+      fileName: noticesPath,
+      outputName: `${SPINE_40_NOTICE_OUTPUT_ROOT}/THIRD_PARTY_NOTICES.md`,
+      contentType: 'text/markdown; charset=utf-8',
+    },
+    {
+      publicPath: GARUPA_PROVIDER_PUBLIC_PATH,
+      fileName: garupaProviderManifestPath,
+      outputName: GARUPA_PROVIDER_OUTPUT_PATH,
+      contentType: 'application/json; charset=utf-8',
+    },
   ]
 
   return {
     name: 'livesd-local-resources',
+    configResolved(config) {
+      basePath = config.base.endsWith('/') ? config.base : `${config.base}/`
+    },
     configureServer(server) {
       server.middlewares.use((request, response, next) => {
         const pathname = requestPath(request)
@@ -77,9 +115,11 @@ export function localResourcePlugin(repositoryRoot: string): Plugin {
           return
         }
 
-        const resource = resources.find(
-          (candidate) => candidate.publicPath === pathname,
-        )
+        const resource = resources.find((candidate) => {
+          const publicPath =
+            `${basePath}${candidate.publicPath.replace(/^\//u, '')}`
+          return publicPath === pathname
+        })
         if (resource) {
           sendFile(response, resource.fileName, resource.contentType)
           return

@@ -257,7 +257,7 @@ afterEach(() => {
 })
 
 describe('App', () => {
-  it('준비중 게임 탭은 선택·요청·현재 PRSK 상태를 변경하지 않는다', async () => {
+  it('준비중 STRR 탭은 선택·요청·현재 PRSK 상태를 변경하지 않는다', async () => {
     const user = userEvent.setup()
     const catalogSpy = vi.spyOn(prskRemoteCatalogSource, 'load')
     const modelSpy = vi.spyOn(prskRemoteResourceSource, 'load')
@@ -267,18 +267,64 @@ describe('App', () => {
     const strrTab = screen.getByRole('tab', {
       name: /레뷰 스타라이트.*준비중/,
     })
-    const garupaTab = screen.getByRole('tab', {
-      name: /BanG Dream!.*준비중/,
-    })
     await user.click(strrTab)
-    fireEvent.click(garupaTab)
 
     expect(prskTab).toHaveAttribute('aria-selected', 'true')
     expect(strrTab).toHaveAttribute('aria-selected', 'false')
-    expect(garupaTab).toHaveAttribute('aria-selected', 'false')
     expect(screen.getByRole('radio', { name: '기본 제공 리소스' })).toBeChecked()
     expect(catalogSpy).not.toHaveBeenCalled()
     expect(modelSpy).not.toHaveBeenCalled()
+  })
+
+  it('BanG Dream 탭을 선택하면 Garupa source와 builder를 활성화한다', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    const prskTab = screen.getByRole('tab', { name: '프로세카' })
+    const garupaTab = screen.getByRole('tab', { name: 'BanG Dream!' })
+    expect(garupaTab).toBeEnabled()
+
+    await user.click(garupaTab)
+
+    expect(prskTab).toHaveAttribute('aria-selected', 'false')
+    expect(garupaTab).toHaveAttribute('aria-selected', 'true')
+    expect(
+      screen.getByRole('heading', {
+        level: 2,
+        name: 'Garupa Spine SD (sdchara)',
+      }),
+    ).toBeVisible()
+    expect(
+      screen.getByRole('radio', { name: '로컬 canonical ZIP' }),
+    ).toBeChecked()
+    expect(screen.getByRole('button', { name: '불러오기' })).toBeDisabled()
+    expect(
+      screen.getByRole('heading', { level: 2, name: 'Codex Pet 패키징' }),
+    ).toBeVisible()
+    expect(
+      screen.getByText('먼저 LiveSD 모델 미리보기를 준비하세요.'),
+    ).toBeVisible()
+  })
+
+  it('StrictMode에서도 Garupa controller를 조기 dispose하지 않는다', async () => {
+    const user = userEvent.setup()
+    render(
+      <StrictMode>
+        <App />
+      </StrictMode>,
+    )
+
+    await user.click(screen.getByRole('tab', { name: 'BanG Dream!' }))
+    await user.click(
+      screen.getByRole('radio', { name: '고정 온라인 snapshot' }),
+    )
+
+    expect(screen.getByRole('button', { name: '불러오기' })).toBeEnabled()
+    expect(
+      screen.getByText(
+        '소스를 선택하세요. 아직 import나 network request는 시작되지 않았습니다.',
+      ),
+    ).toBeVisible()
   })
 
   it('StrictMode mount는 resource나 preview를 자동으로 불러오지 않는다', () => {
@@ -568,9 +614,7 @@ describe('App', () => {
     expect(
       screen.getByRole('tab', { name: /레뷰 스타라이트.*준비중/ }),
     ).toBeDisabled()
-    expect(
-      screen.getByRole('tab', { name: /BanG Dream!.*준비중/ }),
-    ).toBeDisabled()
+    expect(screen.getByRole('tab', { name: 'BanG Dream!' })).toBeEnabled()
     expect(screen.getByText('prsk-chibi-viewer manifest')).toBeVisible()
     expect(screen.getByTestId('livesd-preview-border-box')).toHaveAttribute(
       'aria-hidden',

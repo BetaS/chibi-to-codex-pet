@@ -31,3 +31,22 @@ export function createSkeletonHeader(
     3,
   ]).buffer
 }
+
+export const SPINE_40_FIXTURE_HASH = '2064b5e6-650e410b'
+
+export function createSpine40SkeletonHeader(version: string): ArrayBuffer {
+  return new Uint8Array([
+    0x9a,
+    0xf1,
+    0xbe,
+    0xf5,
+    0x20,
+    0x64,
+    0xb5,
+    0xe6,
+    ...encodeSkeletonString(version),
+    1,
+    2,
+    3,
+  ]).buffer
+}
