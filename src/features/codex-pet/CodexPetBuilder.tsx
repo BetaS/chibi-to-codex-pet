@@ -11,6 +11,7 @@ import {
   useI18n,
   type MessageKey,
 } from '../../i18n'
+import { trackPetZipDownload } from '../../analytics/ga4'
 import type { LiveSDAtlasBundle } from '../livesd/model'
 import {
   liveSD36FrameSampler,
@@ -79,6 +80,7 @@ export interface CodexPetBuilderServices {
   readonly validatePackage: typeof validateCodexPetPackage
   readonly createObjectUrl: (blob: Blob) => string
   readonly revokeObjectUrl: (url: string) => void
+  readonly trackDownload: () => void
 }
 
 export interface CodexPetBuilderProps {
@@ -152,6 +154,7 @@ const DEFAULT_SERVICES: CodexPetBuilderServices = {
   validatePackage: validateCodexPetPackage,
   createObjectUrl: (blob) => URL.createObjectURL(blob),
   revokeObjectUrl: (url) => URL.revokeObjectURL(url),
+  trackDownload: trackPetZipDownload,
 }
 
 const PHASE_MESSAGE_KEYS: Readonly<Record<ExportPhase, MessageKey>> = {
@@ -987,7 +990,11 @@ function CodexPetBuilderContent({
                   <strong>{result.validated.manifest.displayName}</strong>
                   <code>{result.filename}</code>
                 </div>
-                <a download={result.filename} href={result.packageUrl}>
+                <a
+                  download={result.filename}
+                  href={result.packageUrl}
+                  onClick={resolvedServices.trackDownload}
+                >
                   {t('builder.download')}
                 </a>
                 {result.installCommand ? (

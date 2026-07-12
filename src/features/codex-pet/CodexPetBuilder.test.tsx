@@ -95,6 +95,7 @@ function createServices(
     .mockReturnValueOnce('blob:test-package')
     .mockReturnValueOnce('blob:test-spritesheet')
   const revokeObjectUrl = vi.fn()
+  const trackDownload = vi.fn()
 
   return {
     packageBlob,
@@ -104,6 +105,7 @@ function createServices(
       validatePackage,
       createObjectUrl,
       revokeObjectUrl,
+      trackDownload,
     } satisfies CodexPetBuilderServices,
   }
 }
@@ -668,6 +670,12 @@ describe('CodexPetBuilder', () => {
     })
     expect(download).toHaveAttribute('href', 'blob:test-package')
     expect(download).toHaveAttribute('download', 'test-pet.codex-pet.zip')
+    expect(services.trackDownload).not.toHaveBeenCalled()
+    download.addEventListener('click', (event) => event.preventDefault())
+    fireEvent.click(download)
+    expect(services.trackDownload).toHaveBeenCalledTimes(1)
+    fireEvent.click(download)
+    expect(services.trackDownload).toHaveBeenCalledTimes(2)
     expect(services.validatePackage).toHaveBeenCalledWith(packageBlob, {
       allowEdgeClipping: true,
     })
