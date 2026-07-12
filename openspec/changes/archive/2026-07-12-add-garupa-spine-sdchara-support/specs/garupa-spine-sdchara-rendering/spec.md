@@ -48,6 +48,14 @@ Garupa preview와 sampler는 기존 Codex Pet 출력과 같은 `192×208` cell, 
 - **WHEN** skeleton에 geometry는 있지만 선택된 costume texture에서 완전 투명한 attachment가 있다
 - **THEN** alpha calibration은 해당 geometry를 final visible bounds에서 제외한다
 
+### Requirement: 고밀도 display preview 해상도
+
+Garupa preview는 CSS pixel 단위의 layout 크기와 canvas backing store 크기를 분리해야 한다(MUST). Backing store의 width와 height는 각각 CSS 크기에 현재 `devicePixelRatio`의 최솟값 1을 곱해 정수 pixel로 만들어야 하고(MUST), WebGL viewport는 이 backing store 전체를 사용해야 한다(MUST). 이 배율은 canonical `192×208` projection, framing과 export cell 해상도를 변경해서는 안 된다(MUST NOT).
+
+#### Scenario: Retina preview resize
+- **WHEN** preview의 CSS 크기가 `384×416`이고 현재 `devicePixelRatio`가 2이다
+- **THEN** canvas backing store와 WebGL viewport는 `768×832`이고 canonical projection과 export `192×208` cell은 그대로 유지된다
+
 ### Requirement: Garupa dual-eye look rig 검증
 
 `garupa-dual-eye-v1` profile은 parent transform을 가진 `F_eyeL`과 `F_eyeR` bone을 모두 찾아야 하고(MUST), 각 bone 또는 descendant의 현재 visible slot에서 실제 크기가 1×1px보다 크고 `eye`를 포함하되 `eyebrow`를 포함하지 않는 attachment를 하나 이상 확인해야 한다(MUST). 일반 animation preview는 look rig 검증과 독립적으로 ready가 될 수 있지만(MUST), 조건을 만족하지 못하면 v2 package export는 빈 look frame을 생성하지 않고 `GARUPA_LOOK_RIG_UNSUPPORTED`로 차단해야 한다(MUST).
@@ -114,7 +122,7 @@ Garupa sampler는 straight-alpha texture를 `premultipliedAlpha: false` renderer
 
 ### Requirement: Garupa rendering 자원 수명과 오류
 
-Preview session과 export sampler는 각자 소유한 Spine 4.0 animation state, texture, image, shader, batcher, atlas, WebGL 참조와 frame callback을 성공, 실패, 취소와 dispose에서 한 번만 정리해야 한다(MUST). 알려진 Garupa rendering 실패는 아래 영문 code를 사용해야 하며(MUST), 알 수 없는 실패는 `GARUPA_RENDERING_FAILED`로 정규화해야 한다(MUST).
+Preview session과 export sampler는 각자 소유한 Spine 4.0 animation state, texture, image, shader, batcher, atlas, WebGL 참조와 frame callback을 성공, 실패, 취소와 dispose에서 한 번만 정리해야 한다(MUST). Preview session은 integration이 전달한 shared canvas WebGL context를 강제로 lose하거나 canvas 크기를 변경해 다른 session을 무효화해서는 안 된다(MUST NOT). 알려진 Garupa rendering 실패는 아래 영문 code를 사용해야 하며(MUST), 알 수 없는 실패는 `GARUPA_RENDERING_FAILED`로 정규화해야 한다(MUST).
 
 ```text
 GARUPA_ANIMATION_MISSING
@@ -138,3 +146,12 @@ GARUPA_RENDERING_FAILED
 #### Scenario: 중복 dispose
 - **WHEN** 같은 Garupa preview session을 두 번 이상 dispose한다
 - **THEN** 첫 호출에서만 소유 자원을 정리하고 후속 호출은 오류나 중복 해제를 만들지 않는다
+
+#### Scenario: 같은 canvas의 연속 model 교체
+- **WHEN** 같은 canvas에서 두 번째 preview가 첫 visible frame까지 준비된 뒤 이전 preview session을 dispose한다
+- **THEN** 이전 session은 자신의 runtime 자원과 frame callback만 정리하고 `WEBGL_lose_context`를 호출하거나 canvas를 축소하지 않는다
+- **AND** 새 preview는 다음 animation frame과 interactive redraw를 계속 성공한다
+
+#### Scenario: 교체 preview 생성 실패
+- **WHEN** 기존 ready preview와 같은 canvas에서 새 preview 생성이 실패한다
+- **THEN** 실패한 session의 소유 자원만 정리되고 canvas context와 기존 ready preview의 다음 frame은 유지된다

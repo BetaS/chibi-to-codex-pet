@@ -1,4 +1,10 @@
-## ADDED Requirements
+# Garupa pinned snapshot source 명세
+
+## Purpose
+
+고정된 bangdream-live2d snapshot에서 catalog를 만들고 승인된 자산만 안전하게 canonical Garupa source로 materialize하는 계약을 정의한다.
+
+## Requirements
 
 ### Requirement: 승인된 bangdream-live2d provider manifest
 
@@ -28,6 +34,26 @@ Provider resolver는 manifest가 승인한 HTTPS origin, repository와 full comm
 - **WHEN** 호출자가 Bestdori, mutable GitHub branch 또는 다른 mirror URL을 child path로 전달한다
 - **THEN** resolver는 `GARUPA_REMOTE_URL_INVALID`로 거부하고 해당 origin에 request를 보내지 않는다
 
+### Requirement: 고정 캐릭터와 모델 이중 catalog
+
+Pinned source UI는 사용자가 명시적으로 캐릭터 목록 불러오기를 실행한 generation에서만 manifest에 고정된 `_info.json`과 `characters.all.5.json`을 size·SHA-256 검증과 함께 요청해야 한다(MUST). 시스템은 `_info.json`에 실제 buildData가 존재하는 bundle만 model option으로 만들고(MUST), character metadata의 `sdAssetBundleName`을 locale별 `characterName`과 조인해야 한다(MUST). UI는 고유 캐릭터를 첫 번째 searchable combobox로 표시하고, 선택된 캐릭터에 귀속된 bundle만 두 번째 model combobox에 표시해야 한다(MUST). Exact character가 하나로 결정되지 않는 공유 bundle은 이름을 추측해서는 안 되고(MUST NOT), exact 후보가 없을 때 underscore 앞 base bundle이 정확히 한 primary character로 결정되는 경우에만 같은 이름을 상속할 수 있다(MAY). 이름이 모호하거나 없는 bundle은 별도 미매핑 character group에서 원본 bundle ID로 검색·선택할 수 있어야 한다(MUST).
+
+#### Scenario: 대표 캐릭터명 매핑
+- **WHEN** 승인 catalog에서 bundle `00001`을 표시한다
+- **THEN** 첫 combobox는 현재 locale의 토야마 카스미를 표시하고 두 번째 model combobox에 `00001`을 표시하며 model 선택값은 내부적으로 `00001`을 유지한다
+
+#### Scenario: 공유 또는 미매핑 bundle
+- **WHEN** 한 bundle이 여러 non-primary character에 연결되거나 character metadata에 대응값이 없다
+- **THEN** option은 임의 character를 선택하지 않고 별도 미매핑 group 안에서 원본 bundle ID로 검색·선택할 수 있다
+
+#### Scenario: 명시적 2단계 요청
+- **WHEN** 사용자가 pinned source를 선택했지만 캐릭터 목록 불러오기를 실행하지 않았다
+- **THEN** catalog와 model request는 모두 0건이고 두 combobox는 비활성이다
+- **WHEN** 사용자가 목록을 불러와 캐릭터 option을 선택한다
+- **THEN** catalog request만 발생하고 model asset request는 0건이다
+- **WHEN** 사용자가 두 번째 combobox에서 model을 선택한다
+- **THEN** 별도 버튼 없이 해당 model asset request와 preview load가 즉시 시작된다
+
 ### Requirement: Snapshot graph materialization
 
 Remote source는 고정 revision의 `_info.json`과 선택 metadata를 검증하고 선택된 `sdAssetBundleName`의 buildData에서 model bundle과 costume texture 연결을 읽어야 한다(MUST). 같은 revision에서 공용 `.skel`, costume `.atlas.txt`와 atlas가 선언한 모든 PNG page를 full GET으로 받아야 하며(MUST), flattened repository filename과 atlas 내부 page 이름의 대소문자·prefix 차이를 안전하게 매핑해 canonical atlas page path로 정규화해야 한다(MUST). 각 file은 size·content type 보조 정보와 format signature를 검증하고 SHA-256을 계산한 뒤 기존 canonical Garupa source handoff를 사용해야 한다(MUST).
@@ -40,20 +66,28 @@ Remote source는 고정 revision의 `_info.json`과 선택 metadata를 검증하
 - **WHEN** atlas의 page 이름과 snapshot의 flattened 또는 lowercase 실제 filename이 다르다
 - **THEN** resolver는 `_info.json`의 유일한 대응 file을 찾고 atlas page key를 canonical filename으로 매핑하되 임의 suffix 추측이나 다른 revision fallback을 사용하지 않는다
 
+#### Scenario: shared model key 대소문자 차이
+- **WHEN** buildData가 `model/s000_templete_MyGO`를 가리키고 `_info.json`에는 대소문자만 다른 `model/s000_templete_mygo` key가 유일하게 존재한다
+- **THEN** resolver는 해당 실제 entry의 asset path를 사용해 shared skeleton을 수집하고 canonical model identity는 buildData의 이름을 보존한다
+
+#### Scenario: shared model key 대소문자 충돌
+- **WHEN** `_info.json`의 둘 이상의 key가 buildData model key와 대소문자 정규화 후 같아진다
+- **THEN** resolver는 skeleton request 전에 `GARUPA_REMOTE_SNAPSHOT_INVALID`로 실패하고 임의 entry를 선택하지 않는다
+
 #### Scenario: 일부 file 실패
 - **WHEN** graph의 file 하나가 누락되거나 hash·size·format 검증에 실패한다
 - **THEN** source는 부분 bundle을 노출하지 않고 `GARUPA_REMOTE_SNAPSHOT_INVALID`로 실패하며 모든 임시 Blob과 request를 정리한다
 
 ### Requirement: 명시적 remote load와 session-only 상태
 
-Provider manifest를 import하거나 source UI를 mount하는 동작은 external request를 시작해서는 안 된다(MUST NOT). 사용자가 pinned source를 선택하고 명시적으로 `불러오기`를 실행한 현재 request generation에서만 catalog·asset request를 시작해야 하며(MUST), fetched byte와 선택 상태는 현재 browser memory에서만 유지해야 한다(MUST). 새 remote source가 첫 frame까지 성공하기 전에는 기존 ready source를 교체해서는 안 된다(MUST NOT).
+Provider manifest를 import하거나 source UI를 mount하는 동작은 external request를 시작해서는 안 된다(MUST NOT). 사용자가 기본 pinned source에서 명시적으로 캐릭터 목록 불러오기를 실행한 현재 generation에서만 catalog request를 시작하고(MUST), 캐릭터 선택 뒤 model option을 선택한 generation에서 model asset request를 즉시 시작해야 한다(MUST). Fetched byte와 선택 상태는 현재 browser memory에서만 유지해야 한다(MUST). 새 remote source가 첫 frame까지 성공하기 전에는 기존 ready source를 교체해서는 안 된다(MUST NOT).
 
 #### Scenario: manifest 표시 전 request 없음
 - **WHEN** Garupa UI가 provider label과 pinned revision을 표시한다
 - **THEN** 외부 request 수는 0이고 원본 asset byte는 아직 browser memory에 없다
 
 #### Scenario: 명시적 온라인 불러오기
-- **WHEN** 사용자가 approved pinned source에서 costume을 선택하고 `불러오기`를 실행한다
+- **WHEN** 사용자가 approved pinned source의 검증된 catalog에서 캐릭터를 선택한 뒤 model을 선택한다
 - **THEN** 해당 generation만 승인 origin에 request하고 성공 결과를 canonical importer와 runtime에 전달한다
 
 ### Requirement: 비공개 local debug snapshot

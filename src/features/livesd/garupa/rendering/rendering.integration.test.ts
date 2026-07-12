@@ -310,11 +310,48 @@ describe('Garupa preview session', () => {
     session.dispose()
     expect(cancel).toHaveBeenCalledOnce()
     expect(runtime.dispose).toHaveBeenCalledOnce()
-    expect(gl.loseContext).toHaveBeenCalledOnce()
+    expect(gl.loseContext).not.toHaveBeenCalled()
     expect({ height: canvas.height, width: canvas.width }).toEqual({
-      height: 1,
-      width: 1,
+      height: 208,
+      width: 192,
     })
+  })
+
+  it('uses the display pixel ratio for a sharp preview backing store', async () => {
+    const runtime = createRuntimeFixture()
+    const gl = createGlFixture()
+    const canvas = {
+      getContext: vi.fn(() => gl.gl),
+      height: 0,
+      width: 0,
+    } as unknown as HTMLCanvasElement
+    const getPixelRatio = vi.fn(() => 2)
+    const factory = new GarupaSpine40PreviewFactory({
+      getPixelRatio,
+      runtimeAdapter: runtime.adapter,
+      scheduler: { cancel: vi.fn(), request: vi.fn(() => 1) },
+      yieldControl: () => Promise.resolve(),
+    })
+    const session = await factory.createPreview({
+      atlasBundle: createBundle(),
+      canvas,
+      compatibility: 'verified',
+      mappings: createMappings(),
+      skeletonData: new Uint8Array([4, 0, 64]).buffer,
+      version: '4.0.64',
+    })
+    const canonicalProjection = runtime.setProjection.mock.calls.at(-1)?.[0]
+
+    session.resize(384, 416)
+
+    expect(getPixelRatio).toHaveBeenCalledOnce()
+    expect({ height: canvas.height, width: canvas.width }).toEqual({
+      height: 832,
+      width: 768,
+    })
+    expect(gl.gl.viewport).toHaveBeenLastCalledWith(0, 0, 768, 832)
+    expect(runtime.setProjection).toHaveBeenLastCalledWith(canonicalProjection)
+    session.dispose()
   })
 
   it('does not expose a session when the first calibration frame is invisible', async () => {
@@ -346,7 +383,109 @@ describe('Garupa preview session', () => {
       }),
     )
     expect(runtime.dispose).toHaveBeenCalledOnce()
-    expect(gl.loseContext).toHaveBeenCalledOnce()
+    expect(gl.loseContext).not.toHaveBeenCalled()
+    expect({ height: canvas.height, width: canvas.width }).toEqual({
+      height: 0,
+      width: 0,
+    })
+  })
+
+  it('keeps a replacement preview alive when the previous session shares its canvas', async () => {
+    const firstRuntime = createRuntimeFixture()
+    const secondRuntime = createRuntimeFixture()
+    const gl = createGlFixture()
+    const canvas = {
+      getContext: vi.fn(() => gl.gl),
+      height: 208,
+      width: 192,
+    } as unknown as HTMLCanvasElement
+    const firstFactory = new GarupaSpine40PreviewFactory({
+      runtimeAdapter: firstRuntime.adapter,
+      scheduler: { cancel: vi.fn(), request: vi.fn(() => 1) },
+      yieldControl: () => Promise.resolve(),
+    })
+    const secondFactory = new GarupaSpine40PreviewFactory({
+      runtimeAdapter: secondRuntime.adapter,
+      scheduler: { cancel: vi.fn(), request: vi.fn(() => 2) },
+      yieldControl: () => Promise.resolve(),
+    })
+
+    const first = await firstFactory.createPreview({
+      atlasBundle: createBundle(),
+      canvas,
+      compatibility: 'verified',
+      mappings: createMappings(),
+      skeletonData: new Uint8Array([4, 0, 64]).buffer,
+      version: '4.0.64',
+    })
+    const second = await secondFactory.createPreview({
+      atlasBundle: createBundle(),
+      canvas,
+      compatibility: 'verified',
+      mappings: createMappings(),
+      skeletonData: new Uint8Array([4, 0, 64]).buffer,
+      version: '4.0.64',
+    })
+
+    first.dispose()
+    expect(gl.loseContext).not.toHaveBeenCalled()
+    expect(() => second.play('Idle')).not.toThrow()
+    expect(secondRuntime.draw).toHaveBeenCalled()
+    second.dispose()
+  })
+
+  it('preserves an existing preview when replacement creation fails', async () => {
+    const readyRuntime = createRuntimeFixture()
+    const failingRuntime = createRuntimeFixture()
+    const gl = createGlFixture()
+    const canvas = {
+      getContext: vi.fn(() => gl.gl),
+      height: 320,
+      width: 400,
+    } as unknown as HTMLCanvasElement
+    const readyFactory = new GarupaSpine40PreviewFactory({
+      runtimeAdapter: readyRuntime.adapter,
+      scheduler: { cancel: vi.fn(), request: vi.fn(() => 1) },
+      yieldControl: () => Promise.resolve(),
+    })
+    const failingFactory = new GarupaSpine40PreviewFactory({
+      runtimeAdapter: failingRuntime.adapter,
+      scheduler: { cancel: vi.fn(), request: vi.fn(() => 2) },
+      yieldControl: () => Promise.resolve(),
+    })
+    const ready = await readyFactory.createPreview({
+      atlasBundle: createBundle(),
+      canvas,
+      compatibility: 'verified',
+      mappings: createMappings(),
+      skeletonData: new Uint8Array([4, 0, 64]).buffer,
+      version: '4.0.64',
+    })
+    ready.resize(400, 320)
+    gl.readPixels.mockImplementationOnce(() => undefined)
+
+    await expect(
+      failingFactory.createPreview({
+        atlasBundle: createBundle(),
+        canvas,
+        compatibility: 'verified',
+        mappings: createMappings(),
+        skeletonData: new Uint8Array([4, 0, 64]).buffer,
+        version: '4.0.64',
+      }),
+    ).rejects.toEqual(
+      expect.objectContaining<Partial<GarupaRenderingError>>({
+        code: 'GARUPA_PREVIEW_RENDER_FAILED',
+      }),
+    )
+
+    expect(gl.loseContext).not.toHaveBeenCalled()
+    expect({ height: canvas.height, width: canvas.width }).toEqual({
+      height: 320,
+      width: 400,
+    })
+    expect(() => ready.play('Idle')).not.toThrow()
+    ready.dispose()
   })
 
   it('uses the first parsed animation when exact Idle is absent', async () => {

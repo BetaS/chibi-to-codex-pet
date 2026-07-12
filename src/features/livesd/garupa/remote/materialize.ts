@@ -5,6 +5,7 @@ import type { GarupaCanonicalSource } from '../importer'
 import {
   decodeGarupaRemoteText,
   findGarupaBuildDataFile,
+  findUniqueCatalogEntry,
   findUniqueCatalogFile,
   parseGarupaBuildData,
   parseGarupaSnapshotIndex,
@@ -247,13 +248,7 @@ export async function materializeGarupaPinnedSnapshot(
     }
 
     const modelKey = buildData.modelBundleName.slice('sdchara/'.length)
-    const modelEntry = index[modelKey]
-    if (!modelEntry) {
-      throw new GarupaRemoteError(
-        'GARUPA_REMOTE_SNAPSHOT_INVALID',
-        'Garupa shared skeleton entry가 snapshot index에 없습니다.',
-      )
-    }
+    const modelEntry = findUniqueCatalogEntry(index, modelKey)
     const modelName = buildData.modelFileName.replace(
       /_SkeletonData\.asset$/u,
       '',

@@ -38,7 +38,7 @@
 시스템은 현재 선택된 available game entry의 integration을 통해 source 입력, resource loading, preview, 방향 설정과 Codex Pet build를 수행해야 한다(SHALL). `prsk` entry는 `src/features/livesd/prsk/`, `garupa` entry는 `src/features/livesd/garupa/` 공개 integration에 연결되어야 한다(MUST).
 
 #### Scenario: Garupa pinned source preview와 build
-- **WHEN** 사용자가 `BanG Dream!`을 선택하고 승인된 pinned source를 명시적으로 불러온다
+- **WHEN** 사용자가 `BanG Dream!`을 선택하고 기본 live resource pack의 캐릭터와 모델을 순서대로 선택한다
 - **THEN** 앱은 exact-commit provider에서 canonical Spine 4.0 source를 만들고 첫 visible frame 뒤에 preview를 ready로 표시해야 한다
 - **AND** 실제 animation 목록, paired-eye look와 Garupa frame sampler를 사용해 Codex Pet package build를 제공해야 한다
 

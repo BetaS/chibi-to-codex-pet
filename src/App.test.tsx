@@ -291,13 +291,30 @@ describe('App', () => {
     expect(
       screen.getByRole('heading', {
         level: 2,
-        name: 'Garupa Spine SD (sdchara)',
+        name: '라이브 리소스 팩',
       }),
     ).toBeVisible()
     expect(
-      screen.getByRole('radio', { name: '로컬 canonical ZIP' }),
-    ).toBeChecked()
-    expect(screen.getByRole('button', { name: '불러오기' })).toBeDisabled()
+      screen.getByRole('button', { name: '라이브 리소스 목록 불러오기' }),
+    ).toBeEnabled()
+    expect(screen.getByRole('combobox', { name: '캐릭터' })).toBeDisabled()
+    expect(screen.getByRole('combobox', { name: '모델' })).toBeDisabled()
+    expect(screen.getByText('고급 기능 · 로컬 ZIP')).toBeVisible()
+    expect(screen.queryByRole('radiogroup', { name: '소스' })).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { level: 2, name: '캐릭터 미리보기' }),
+    ).toBeVisible()
+    expect(screen.getByText('아직 표시할 캐릭터가 없습니다.')).toBeVisible()
+    expect(screen.getByLabelText('Pet 크기 슬라이더')).toBeDisabled()
+    expect(screen.getByLabelText('Garupa Spine WebGL 미리보기')).toHaveAttribute(
+      'width',
+      '192',
+    )
+    expect(
+      screen.getByLabelText('Garupa Spine WebGL 미리보기').closest(
+        '.preview-panel',
+      ),
+    ).not.toBeNull()
     expect(
       screen.getByRole('heading', { level: 2, name: 'Codex Pet 패키징' }),
     ).toBeVisible()
@@ -315,14 +332,14 @@ describe('App', () => {
     )
 
     await user.click(screen.getByRole('tab', { name: 'BanG Dream!' }))
-    await user.click(
-      screen.getByRole('radio', { name: '고정 온라인 snapshot' }),
-    )
-
-    expect(screen.getByRole('button', { name: '불러오기' })).toBeEnabled()
+    expect(
+      screen.getByRole('button', { name: '라이브 리소스 목록 불러오기' }),
+    ).toBeEnabled()
+    expect(screen.getByRole('combobox', { name: '캐릭터' })).toBeDisabled()
+    expect(screen.getByRole('combobox', { name: '모델' })).toBeDisabled()
     expect(
       screen.getByText(
-        '소스를 선택하세요. 아직 import나 network request는 시작되지 않았습니다.',
+        '목록을 불러오고 캐릭터와 모델을 선택하세요. 아직 모델 요청은 시작되지 않았습니다.',
       ),
     ).toBeVisible()
   })

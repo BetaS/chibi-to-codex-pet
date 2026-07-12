@@ -3,7 +3,9 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider, LocaleSelector } from '../../../../i18n'
+import { readCodexPetSettingsPresetCatalog } from '../../../codex-pet/settingsPresets'
 import type { GarupaCanonicalSource } from '../importer'
+import type { GarupaPinnedCharacterCatalog } from '../remote'
 import type { GarupaSpine40PreviewSession } from '../rendering'
 import { GarupaSourceController } from './GarupaSourceController'
 import { GarupaSourcePanel } from './GarupaSourcePanel'
@@ -60,17 +62,84 @@ function preview(id: string): GarupaSpine40PreviewSession {
   }
 }
 
-function renderPanel(controller: GarupaSourceController) {
+function characterCatalog(): GarupaPinnedCharacterCatalog {
+  const kasumiNames = {
+    en: 'Kasumi Toyama',
+    ja: '戸山 香澄',
+    ko: '토야마 카스미',
+    zhCN: '户山 香澄',
+  }
+  return {
+    entries: [
+      {
+        bundleName: '00001',
+        characterId: 1,
+        names: kasumiNames,
+        resolution: 'exact',
+      },
+      {
+        bundleName: '00001_2023',
+        characterId: 1,
+        names: kasumiNames,
+        resolution: 'base',
+      },
+      {
+        bundleName: '00002',
+        characterId: 2,
+        names: {
+          en: 'Ran Mitake',
+          ja: '美竹 蘭',
+          ko: '미타케 란',
+          zhCN: '美竹 兰',
+        },
+        resolution: 'exact',
+      },
+      {
+        bundleName: '01001',
+        characterId: null,
+        names: null,
+        resolution: 'ambiguous',
+      },
+    ],
+  }
+}
+
+function renderPanel(
+  controller: GarupaSourceController,
+  characterCatalogLoader?: () => Promise<GarupaPinnedCharacterCatalog>,
+) {
+  const canvas = document.createElement('canvas')
+  const catalogProps = characterCatalogLoader
+    ? { characterCatalogLoader }
+    : {}
   return render(
     <I18nProvider initialLocale="ko" storage={null}>
       <LocaleSelector />
-      <GarupaSourcePanel controller={controller} />
+      <GarupaSourcePanel
+        controller={controller}
+        onLoad={() => void controller.load(canvas)}
+        onPresetSelectionChange={vi.fn()}
+        presetCatalog={readCodexPetSettingsPresetCatalog(null)}
+        {...catalogProps}
+      />
     </I18nProvider>,
   )
 }
 
+async function loadCatalogAndSelectKasumi(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(
+    screen.getByRole('button', { name: '라이브 리소스 목록 불러오기' }),
+  )
+  const character = screen.getByRole('combobox', { name: '캐릭터' })
+  await waitFor(() => expect(character).toBeEnabled())
+  await user.click(character)
+  await user.type(character, '카스미')
+  await user.click(screen.getByRole('option', { name: '토야마 카스미' }))
+  return screen.getByRole('combobox', { name: '모델' })
+}
+
 describe('Garupa source panel lifecycle', () => {
-  it('mount, manifest display, and file selection perform no work until explicit load', async () => {
+  it('uses the live pack by default and keeps local ZIP loading in advanced controls', async () => {
     const user = userEvent.setup()
     const localSource = source('local-00001')
     const importLocal = vi.fn(async () => localSource)
@@ -83,40 +152,89 @@ describe('Garupa source panel lifecycle', () => {
     })
     renderPanel(controller)
 
+    expect(screen.getByTestId('garupa-resource-preset-selector')).toBeVisible()
     expect(
-      screen.getByText('https://github.com/panxuc/bangdream-live2d'),
+      screen.getByRole('heading', { name: '라이브 리소스 팩' }),
     ).toBeVisible()
+    expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument()
+    expect(screen.queryByText(/github\.com\/panxuc/u)).not.toBeInTheDocument()
+    expect(screen.queryByText(/15b3e023/u)).not.toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: '캐릭터' })).toBeDisabled()
+    expect(screen.getByRole('combobox', { name: '모델' })).toBeDisabled()
     expect(importLocal).not.toHaveBeenCalled()
     expect(materializePinned).not.toHaveBeenCalled()
     expect(createPreview).not.toHaveBeenCalled()
 
+    await user.click(screen.getByText('고급 기능 · 로컬 ZIP'))
     await user.upload(
       screen.getByLabelText('Garupa Spine pack ZIP 선택'),
       new File(['fixture'], 'character.zip', { type: 'application/zip' }),
     )
     expect(importLocal).not.toHaveBeenCalled()
-    expect(materializePinned).not.toHaveBeenCalled()
-    expect(createPreview).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: '로컬 ZIP 불러오기' }))
 
-    await user.click(screen.getByRole('button', { name: '불러오기' }))
-    await waitFor(() =>
-      expect(
-        screen.getByText('Garupa의 첫 visible preview frame이 준비되었습니다.'),
-      ).toBeVisible(),
-    )
+    await waitFor(() => expect(controller.getState().phase).toBe('ready'))
     expect(importLocal).toHaveBeenCalledOnce()
     expect(materializePinned).not.toHaveBeenCalled()
     expect(createPreview).toHaveBeenCalledOnce()
     expect(controller.getActiveSource()).toBe(localSource)
   })
 
-  it('starts pinned requests only on load and preserves the previous ready source on failure', async () => {
+  it('filters models by character and loads each model immediately on selection', async () => {
     const user = userEvent.setup()
-    const localSource = source('local-ready')
-    const remoteSource = source('remote-fails')
+    const firstPreview = preview('00001')
+    const secondPreview = preview('00001_2023')
+    const materializePinned = vi.fn(async (bundleName: string) =>
+      source(bundleName),
+    )
+    const createPreview = vi
+      .fn()
+      .mockResolvedValueOnce(firstPreview)
+      .mockResolvedValueOnce(secondPreview)
+    const controller = new GarupaSourceController({
+      createPreview,
+      materializePinned,
+    })
+    const loadCatalog = vi.fn(async () => characterCatalog())
+    renderPanel(controller, loadCatalog)
+
+    const model = await loadCatalogAndSelectKasumi(user)
+    expect(model).toBeEnabled()
+    expect(screen.getByText('캐릭터 2명 · 모델 4개')).toBeVisible()
+    expect(materializePinned).not.toHaveBeenCalled()
+
+    await user.click(model)
+    expect(screen.getByRole('option', { name: '00001' })).toBeVisible()
+    expect(screen.getByRole('option', { name: '00001_2023' })).toBeVisible()
+    expect(screen.queryByRole('option', { name: '00002' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('option', { name: '00001' }))
+
+    await waitFor(() =>
+      expect(controller.getActiveSource()?.metadata.sdAssetBundleName).toBe(
+        '00001',
+      ),
+    )
+    expect(materializePinned).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('button', { name: '불러오기' })).not.toBeInTheDocument()
+
+    await user.click(model)
+    await user.click(screen.getByRole('option', { name: '00001_2023' }))
+    await waitFor(() =>
+      expect(controller.getActiveSource()?.metadata.sdAssetBundleName).toBe(
+        '00001_2023',
+      ),
+    )
+    expect(materializePinned).toHaveBeenCalledTimes(2)
+    expect(firstPreview.dispose).toHaveBeenCalledOnce()
+    expect(secondPreview.dispose).not.toHaveBeenCalled()
+  })
+
+  it('preserves the previous ready model when an immediate replacement fails', async () => {
+    const user = userEvent.setup()
     const readyPreview = preview('ready')
-    const importLocal = vi.fn(async () => localSource)
-    const materializePinned = vi.fn(async () => remoteSource)
+    const materializePinned = vi.fn(async (bundleName: string) =>
+      source(bundleName),
+    )
     const createPreview = vi
       .fn()
       .mockResolvedValueOnce(readyPreview)
@@ -127,41 +245,30 @@ describe('Garupa source panel lifecycle', () => {
       })
     const controller = new GarupaSourceController({
       createPreview,
-      importLocal,
       materializePinned,
     })
-    renderPanel(controller)
+    renderPanel(controller, vi.fn(async () => characterCatalog()))
 
-    await user.upload(
-      screen.getByLabelText('Garupa Spine pack ZIP 선택'),
-      new File(['fixture'], 'ready.zip', { type: 'application/zip' }),
-    )
-    await user.click(screen.getByRole('button', { name: '불러오기' }))
+    const model = await loadCatalogAndSelectKasumi(user)
+    await user.click(model)
+    await user.click(screen.getByRole('option', { name: '00001' }))
     await waitFor(() => expect(controller.getState().phase).toBe('ready'))
 
-    await user.click(screen.getByRole('radio', { name: '고정 온라인 snapshot' }))
-    expect(materializePinned).not.toHaveBeenCalled()
-    await user.click(screen.getByRole('button', { name: '불러오기' }))
-
+    await user.click(model)
+    await user.click(screen.getByRole('option', { name: '00001_2023' }))
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent(
       'Garupa Spine 모델을 안전하게 미리보기 또는 sampling하지 못했습니다.',
     )
     expect(alert).not.toHaveTextContent('/Users/private')
     expect(alert).toHaveAttribute('data-code', 'GARUPA_PREVIEW_RENDER_FAILED')
-    expect(alert).toHaveAttribute('data-generation', '2')
+    expect(controller.getActiveSource()?.metadata.sdAssetBundleName).toBe('00001')
+    expect(readyPreview.dispose).not.toHaveBeenCalled()
+
     await user.click(screen.getByRole('button', { name: 'English' }))
     expect(screen.getByRole('alert')).toHaveTextContent(
       'The Garupa Spine model could not be previewed or sampled safely.',
     )
-    expect(screen.getByRole('alert')).toHaveAttribute(
-      'data-code',
-      'GARUPA_PREVIEW_RENDER_FAILED',
-    )
-    expect(screen.getByRole('alert')).toHaveAttribute('data-generation', '2')
-    expect(controller.getActiveSource()).toBe(localSource)
-    expect(readyPreview.dispose).not.toHaveBeenCalled()
-    expect(materializePinned).toHaveBeenCalledOnce()
   })
 
   it('a new controller starts with memory-only idle state', () => {

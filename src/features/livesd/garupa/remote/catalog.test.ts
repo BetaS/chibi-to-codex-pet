@@ -4,6 +4,7 @@ import { GarupaRemoteError } from './errors'
 import {
   findGarupaBuildDataFile,
   findUniqueCatalogFile,
+  listGarupaBuildDataBundleNames,
   parseGarupaBuildData,
   parseGarupaSnapshotIndex,
 } from './catalog'
@@ -45,6 +46,10 @@ describe('Garupa pinned catalog graph', () => {
         'S000_TEMPLETE.SKEL',
       ),
     ).toBe('s000_templete.skel')
+    expect(listGarupaBuildDataBundleNames(index)).toEqual([
+      '00001',
+      '00002',
+    ])
     expect(Object.isFrozen(index)).toBe(true)
   })
 
@@ -90,6 +95,11 @@ describe('Garupa pinned catalog graph', () => {
     expect(() => findGarupaBuildDataFile(parsed, '00001')).toThrowError(
       expect.objectContaining<Partial<GarupaRemoteError>>({
         code: 'GARUPA_REMOTE_BUILDDATA_INVALID',
+      }),
+    )
+    expect(() => listGarupaBuildDataBundleNames(parsed)).toThrowError(
+      expect.objectContaining<Partial<GarupaRemoteError>>({
+        code: 'GARUPA_REMOTE_CATALOG_INVALID',
       }),
     )
 

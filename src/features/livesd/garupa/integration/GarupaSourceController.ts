@@ -129,6 +129,17 @@ export class GarupaSourceController {
     return () => this.#listeners.delete(listener)
   }
 
+  clearSelection(): void {
+    this.#assertUsable()
+    this.#selection = null
+    this.#publish({
+      ...this.#state,
+      diagnostic: null,
+      phase: this.#activeSource ? 'ready' : 'idle',
+      selection: null,
+    })
+  }
+
   selectLocal(file: File | null): void {
     this.#assertUsable()
     this.#selection = file ? { kind: 'local', file } : null

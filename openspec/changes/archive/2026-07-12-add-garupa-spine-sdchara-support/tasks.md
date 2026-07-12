@@ -42,6 +42,8 @@ License and local evidence: 공식 `@esotericsoftware/spine-webgl@4.0.31` exact 
 - [x] 4.7 Transparent framebuffer readback을 PNG 기록 전에 straight RGBA로 정확히 한 번 정규화하고 alpha 0 RGB를 0으로 만드는 alpha pipeline을 구현한다.
 - [x] 4.8 Parse·draw·look·readback·취소·중복 dispose의 stable rendering 오류와 animation state, texture, shader, batcher, atlas, WebGL 및 frame callback 정리를 구현한다.
 - [x] 4.9 Straight-alpha edge, draw order, animation catalog, canonical projection, dual-eye 16방향, mirror semantics, 73-frame 결정성 및 자원 수명을 synthetic·characterization test로 검증한다.
+- [x] 4.10 같은 canvas에서 preview를 연속 교체할 때 이전 session이 shared WebGL context를 lose하거나 canvas를 축소하지 않게 하고, 성공·실패 교체 뒤 다음 frame이 유지되는 회귀 test를 추가한다.
+- [x] 4.11 Garupa preview의 CSS 크기와 canvas backing store를 분리해 Retina device pixel ratio를 적용하고 canonical projection·export 해상도가 유지되는 회귀 test를 추가한다.
 
 ## 5. Garupa integration 경계
 
@@ -51,6 +53,10 @@ License and local evidence: 공식 `@esotericsoftware/spine-webgl@4.0.31` exact 
 - [x] 5.4 모든 지원 locale에 `Garupa Spine SD (sdchara)` 안내, 4-frame LIVE sprite 구분과 stable pack/runtime/rendering 오류 message를 추가하고 locale 변경 시 code·generation을 보존한다.
 - [x] 5.5 새로고침 후 memory-only 초기화, 실패한 source 교체의 기존 상태 보존, mount·manifest 표시·선택 단계의 network 0건과 raw exception·path·ZIP byte 비노출을 component test로 검증한다.
 - [x] 5.6 Activation 전 registry guard를 회귀 test로 고정하고 승인 provider metadata만 허용하면서 원본 `.skel`·atlas·PNG·buildData·ZIP·Unity bundle·debug backup을 막는 repository/production artifact allowlist를 확장한다.
+- [x] 5.7 고정 `_info`와 character catalog를 명시적 목록 action에서만 검증·조인하고 locale별 `캐릭터명 · bundle ID` 검색 option, 모호·미매핑 fallback과 model load 분리를 구현·검증한다.
+- [x] 5.8 승인 pinned live resource pack을 기본 UI로 두고 local canonical ZIP을 접힌 고급 기능으로 이동하며 repository·commit·region·license disclosure panel을 제거한다.
+- [x] 5.9 Catalog를 locale별 캐릭터와 해당 캐릭터의 model bundle 이중 combobox로 재구성하고, 캐릭터 선택은 request 없이 model 선택에서 별도 버튼 없이 즉시 materialization·preview를 시작하도록 구현·검증한다.
+- [x] 5.10 Pinned buildData와 `_info.json` shared model key의 대소문자 차이를 유일한 case-fold match로 해석하고 충돌을 skeleton request 전에 거부하는 회귀 test를 추가한다.
 
 ## 6. 통합 검증과 activation 준비
 
@@ -66,5 +72,11 @@ License and local evidence: 공식 `@esotericsoftware/spine-webgl@4.0.31` exact 
 - [x] 7.1 `game-source-selection`과 Garupa integration boundary를 갱신하고 `garupa` registry entry를 모든 build에서 `available`과 공개 `GarupaSourceIntegration`으로 연결한다.
 - [x] 7.2 공식 Spine 4.0.31을 exact production dependency로 승격하고 public preview·production artifact 포함 승인을 provenance·notice·web/CLI artifact verifier에 기록하되 release·push와 Garupa 원본 asset 포함은 계속 차단한다.
 - [x] 7.3 Registry·App component 회귀 test, 전체 test/typecheck/lint/build, OpenSpec strict validation과 기존 ngrok URL의 공개 browser pinned-source smoke를 통과시킨다.
+- [x] 7.4 전체 회귀·typecheck·lint·build·OpenSpec strict validation을 다시 통과시키고 ngrok browser에서 서로 다른 두 model의 연속 즉시 로드, 이전 preview 보존과 반응형 이중 combobox를 검증한다.
+- [x] 7.5 공개 browser에서 mixed-case MyGO source `00040_2023`의 73-frame Codex Pet package를 생성·다운로드하고 독립 package validator, 전체 build·artifact gate와 main spec 동기화 준비를 검증한다.
 
-7.3 validation note: 격리된 `feature/bang_dream_support` worktree에서 Garupa registry·App·runtime·remote·importer 회귀 test, 전체 test 498개와 CLI test 6개, typecheck, lint/build, runtime/provider/production artifact verifier, OpenSpec strict validation, 실제 외부 fixture의 73-frame package validator와 ngrok production browser pinned-source·ZIP 생성 smoke를 통과했다.
+7.3 validation note: 격리된 `feature/bang_dream_support` worktree에서 Garupa registry·App·runtime·remote·importer 회귀 test, 전체 test 502개와 CLI test 6개, typecheck, lint/build, runtime/provider/production artifact verifier, OpenSpec strict validation, 실제 외부 fixture의 690-bundle locale name catalog와 73-frame package validator, ngrok production browser pinned-source·ZIP 생성 smoke를 통과했다.
+
+7.4 validation note: 전체 test 505개와 CLI test 6개, typecheck, lint/build, runtime/provider/production artifact verifier와 OpenSpec strict validation을 통과했다. ngrok browser에서 live resource 목록 140개 character group·690개 model, `00001`과 `00001_2023`의 연속 즉시 load·첫 visible frame·324개 animation catalog·교체 뒤 interactive redraw를 확인했고 alert와 console error는 0건이었다. 390×844 viewport에서 두 combobox는 324px 폭으로 viewport 안에 있었고 document horizontal overflow는 0이었다.
+
+7.5 validation note: 공개 ngrok browser에서 mixed-case MyGO/Taki source `00040_2023`을 즉시 불러와 `taki-shina-00040-2023.codex-pet.zip`을 생성·다운로드하고 설치 preview까지 확인했으며 alert, console error, page error와 failed request는 0건이었다. ZIP SHA-256은 `cc4c283b5f0293ad6fad3b6d42f74d134872548777c1fa99cbc271752307d62e`이고, 독립 validator는 manifest ID `taki-shina-00040-2023`, 1536×2288 PNG, 8×11 cell, row별 사용 frame `[6,8,8,4,5,8,6,6,6,8,8]`, 총 73 frame, 미사용 cell alpha 0, edge clipping 0을 확인했다. 전체 web test 508개와 CLI test 6개, typecheck, lint, production·CLI build와 runtime/provider/artifact verifier, OpenSpec 21개 strict validation을 통과했고 Garupa·Spine 4.0 delta를 main spec에 동기화해 커밋 전 상태로 준비했다.

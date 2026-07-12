@@ -14,6 +14,8 @@ Bestdori는 BanG Dream!의 Spine 기반 `sdchara` 공용 skeleton과 의상 atla
 - Bestdori 직접 URL, 임의 mirror URL과 mutable branch는 제품 source에서 제외한다. 제품 browser는 승인된 `bangdream-live2d` manifest의 pinned delivery origin만 사용한다.
 - Bestdori의 `characters/livesd/**` 4-frame sprite, Live2D (Cubism), 원본 Unity AssetBundle과 다른 region의 혼합 runtime은 이번 지원 범위에서 제외한다.
 - 실제 외부 fixture와 artifact gate가 모두 통과했으므로 현재 feature branch에서 `garupa` registry entry를 `available`로 전환하고 공개 Garupa integration을 연결한다. 개발·production build를 환경별로 분기하지 않으며 release·push는 별도 사용자 지시 전까지 수행하지 않는다.
+- Garupa 탭의 기본 입력을 승인된 live resource pack으로 두고, 캐릭터와 그 캐릭터의 모델을 순서대로 고르는 이중 combobox를 제공한다. 모델 선택은 별도 확인 버튼 없이 해당 pinned model의 materialization과 preview를 즉시 시작하며 local canonical ZIP은 접힌 고급 기능으로 유지한다.
+- 같은 canvas에서 모델을 연속 교체할 때 preview session이 canvas 소유 WebGL context를 강제로 잃게 하지 않고 자신이 만든 Spine·texture 자원만 정리해 두 번째 이후 로딩도 안정적으로 동작하게 한다.
 
 ## Capabilities
 

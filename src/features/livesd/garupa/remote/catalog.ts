@@ -1,7 +1,9 @@
 import { GarupaRemoteError } from './errors'
 
 const SAFE_SEGMENT = /^[A-Za-z0-9_][A-Za-z0-9._-]*$/
+const SAFE_BUNDLE_NAME = /^[A-Za-z0-9_][A-Za-z0-9_-]{0,127}$/
 const MAX_CATALOG_FILES = 8_192
+const BUILD_DATA_FILE = /-builddata-([A-Za-z0-9_][A-Za-z0-9_-]{0,127})-builddata\.asset$/u
 
 export interface GarupaSnapshotIndexEntry {
   readonly assetPath: string
@@ -175,6 +177,50 @@ export function findUniqueCatalogFile(
     )
   }
   return matches[0] as string
+}
+
+export function findUniqueCatalogEntry(
+  index: GarupaSnapshotIndex,
+  expectedKey: string,
+): GarupaSnapshotIndexEntry {
+  const normalized = expectedKey.toLowerCase()
+  const matches = Object.entries(index).filter(
+    ([candidate]) => candidate.toLowerCase() === normalized,
+  )
+  if (matches.length !== 1) {
+    throw new GarupaRemoteError(
+      'GARUPA_REMOTE_SNAPSHOT_INVALID',
+      'Garupa snapshot에서 유일한 graph entry 대응값을 찾지 못했습니다.',
+    )
+  }
+  return matches[0]![1]
+}
+
+export function listGarupaBuildDataBundleNames(
+  index: GarupaSnapshotIndex,
+): readonly string[] {
+  const names: string[] = []
+  const normalizedNames = new Set<string>()
+  for (const file of index.builddata?.files ?? []) {
+    const match = BUILD_DATA_FILE.exec(file)
+    if (!match) continue
+    const name = match[1]
+    if (!name || !SAFE_BUNDLE_NAME.test(name)) {
+      invalidCatalog('Garupa buildData bundle name이 올바르지 않습니다.')
+    }
+    const normalized = name.toLowerCase()
+    if (normalizedNames.has(normalized)) {
+      invalidCatalog('Garupa buildData bundle name이 중복되었습니다.')
+    }
+    normalizedNames.add(normalized)
+    names.push(name)
+  }
+  if (names.length === 0) {
+    invalidCatalog('Garupa asset index에 buildData bundle이 없습니다.')
+  }
+  return Object.freeze(names.sort((left, right) =>
+    left < right ? -1 : left > right ? 1 : 0,
+  ))
 }
 
 export function findGarupaBuildDataFile(

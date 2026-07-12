@@ -63,7 +63,11 @@ const browserAnimationFrameScheduler: GarupaAnimationFrameScheduler = {
   },
 }
 
+const browserPixelRatio = (): number =>
+  Math.max(window.devicePixelRatio || 1, 1)
+
 export interface GarupaSpine40PreviewFactoryOptions {
+  readonly getPixelRatio?: () => number
   readonly runtimeAdapter: GarupaSpine40RuntimeAdapter
   readonly scheduler?: GarupaAnimationFrameScheduler
   readonly yieldControl?: () => Promise<void>
@@ -134,6 +138,7 @@ class ReadyGarupaSpine40PreviewSession
   readonly #animationDurations: ReadonlyMap<string, number>
   readonly #canvas: HTMLCanvasElement
   readonly #compatibility: 'experimental' | 'verified'
+  readonly #getPixelRatio: () => number
   readonly #gl: WebGLRenderingContext
   readonly #listeners = new Set<(error: Error) => void>()
   readonly #runtimeSession: GarupaSpine40RuntimeSession
@@ -160,6 +165,7 @@ class ReadyGarupaSpine40PreviewSession
     readonly canvas: HTMLCanvasElement
     readonly compatibility: 'experimental' | 'verified'
     readonly currentAnimation: string
+    readonly getPixelRatio: () => number
     readonly gl: WebGLRenderingContext
     readonly lookRigSupported: boolean
     readonly runtimeSession: GarupaSpine40RuntimeSession
@@ -170,6 +176,7 @@ class ReadyGarupaSpine40PreviewSession
     this.#canvas = input.canvas
     this.#compatibility = input.compatibility
     this.#currentAnimation = input.currentAnimation
+    this.#getPixelRatio = input.getPixelRatio
     this.#gl = input.gl
     this.#runtimeSession = input.runtimeSession
     this.#scheduler = input.scheduler
@@ -233,8 +240,18 @@ class ReadyGarupaSpine40PreviewSession
     ) {
       throw new RangeError('Preview dimensions must be positive integers.')
     }
-    this.#canvas.width = width
-    this.#canvas.height = height
+    const requestedPixelRatio = this.#getPixelRatio()
+    const pixelRatio = Number.isFinite(requestedPixelRatio)
+      ? Math.max(requestedPixelRatio, 1)
+      : 1
+    const backingWidth = Math.max(Math.floor(width * pixelRatio), 1)
+    const backingHeight = Math.max(Math.floor(height * pixelRatio), 1)
+    if (this.#canvas.width !== backingWidth) {
+      this.#canvas.width = backingWidth
+    }
+    if (this.#canvas.height !== backingHeight) {
+      this.#canvas.height = backingHeight
+    }
     this.#redraw()
   }
 
@@ -282,13 +299,6 @@ class ReadyGarupaSpine40PreviewSession
       this.#animationFrame = null
     }
     safely(() => this.#runtimeSession.dispose())
-    safely(() => {
-      this.#gl.clearColor(0, 0, 0, 0)
-      this.#gl.clear(this.#gl.COLOR_BUFFER_BIT)
-    })
-    safely(() => this.#gl.getExtension('WEBGL_lose_context')?.loseContext())
-    this.#canvas.width = 1
-    this.#canvas.height = 1
     this.#listeners.clear()
   }
 
@@ -392,11 +402,13 @@ class ReadyGarupaSpine40PreviewSession
 export class GarupaSpine40PreviewFactory
   implements GarupaSpine40PreviewCreator
 {
+  readonly #getPixelRatio: () => number
   readonly #runtimeAdapter: GarupaSpine40RuntimeAdapter
   readonly #scheduler: GarupaAnimationFrameScheduler
   readonly #yieldControl: () => Promise<void>
 
   constructor(options: GarupaSpine40PreviewFactoryOptions) {
+    this.#getPixelRatio = options.getPixelRatio ?? browserPixelRatio
     this.#runtimeAdapter = options.runtimeAdapter
     this.#scheduler = options.scheduler ?? browserAnimationFrameScheduler
     this.#yieldControl = options.yieldControl ?? (() => Promise.resolve())
@@ -407,6 +419,8 @@ export class GarupaSpine40PreviewFactory
     options: GarupaSpine40PreviewCreateOptions = {},
   ): Promise<GarupaSpine40PreviewSession> {
     throwIfGarupaSamplingAborted(options.signal)
+    const previousCanvasWidth = input.canvas.width
+    const previousCanvasHeight = input.canvas.height
     input.canvas.width = CODEX_PET_CELL_WIDTH
     input.canvas.height = CODEX_PET_CELL_HEIGHT
     const gl = input.canvas.getContext('webgl', GARUPA_PREVIEW_WEBGL_ATTRIBUTES)
@@ -543,6 +557,7 @@ export class GarupaSpine40PreviewFactory
         canvas: input.canvas,
         compatibility: input.compatibility,
         currentAnimation: defaultAnimation,
+        getPixelRatio: this.#getPixelRatio,
         gl,
         lookRigSupported,
         runtimeSession,
@@ -565,9 +580,8 @@ export class GarupaSpine40PreviewFactory
     } finally {
       if (!handedOff) {
         safely(() => runtimeSession?.dispose())
-        safely(() => gl.getExtension('WEBGL_lose_context')?.loseContext())
-        input.canvas.width = 1
-        input.canvas.height = 1
+        input.canvas.width = previousCanvasWidth
+        input.canvas.height = previousCanvasHeight
       }
     }
   }

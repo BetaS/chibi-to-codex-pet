@@ -12,21 +12,26 @@ Garupa 전용 manifest, archive importer, source metadata, 오류 adapter, runti
 - **WHEN** 후속 변경이 Garupa source UI 또는 game integration을 구성한다
 - **THEN** composition root는 `livesd/garupa/index.ts` 공개 API만 사용하고 archive·manifest·오류 구현을 deep import하지 않는다
 
-### Requirement: 명시적인 source lifecycle
+### Requirement: 기본 live source와 명시적인 source lifecycle
 
-Garupa source 경계는 canonical ZIP과 승인된 pinned snapshot을 구분해 제공하고 두 경로 모두 명시적인 `불러오기` action에서만 시작해야 한다(MUST). Mount, tab preview, provider manifest import, label 표시와 local file 선택만으로 import·runtime load·network request를 시작해서는 안 된다(MUST NOT). 새 source가 첫 frame까지 성공한 경우에만 active Garupa source와 preview를 원자적으로 교체해야 하며(MUST), 새 import가 실패하면 기존 ready source와 animation·mapping 상태를 유지해야 한다(MUST).
+Garupa source 경계는 승인된 pinned live resource pack을 기본 경로로, canonical ZIP을 고급 fallback으로 제공해야 한다(MUST). Mount, tab preview, provider manifest import, label 표시와 local file 선택만으로 model import·runtime load를 시작해서는 안 되며(MUST NOT), pinned catalog request는 사용자의 명시적인 목록 action에서만 시작해야 한다(MUST). 캐릭터 선택은 model request를 시작해서는 안 되고(MUST NOT), 두 번째 model 선택은 별도 확인 버튼 없이 해당 generation의 pinned materialization과 runtime preview를 즉시 시작해야 한다(MUST). Local ZIP은 파일 선택 뒤 명시적인 local `불러오기` action에서만 시작해야 한다(MUST). 새 source가 첫 frame까지 성공한 경우에만 active Garupa source와 preview를 원자적으로 교체해야 하며(MUST), 새 import가 실패하면 기존 ready source와 animation·mapping 상태를 유지해야 한다(MUST).
 
 #### Scenario: 초기 idle 상태
 - **WHEN** Garupa source container가 mount되고 사용자가 pack을 선택하지 않았다
-- **THEN** local pack과 experimental pinned snapshot 안내를 표시하고 import·runtime·외부 request 수는 0이어야 한다
+- **THEN** pinned live resource pack을 기본으로 표시하고 local pack은 고급 기능에 두며 import·runtime·외부 request 수는 0이어야 한다
 
 #### Scenario: 명시적 불러오기
 - **WHEN** 사용자가 하나의 local canonical ZIP을 선택하고 `불러오기`를 실행한다
 - **THEN** integration은 해당 request generation에서만 importer와 runtime preview를 순서대로 시작한다
 
-#### Scenario: 명시적 pinned snapshot 불러오기
-- **WHEN** 사용자가 manifest의 repository·commit·권리 상태와 외부 요청 안내를 확인하고 pinned source `불러오기`를 실행한다
-- **THEN** integration은 해당 generation에서만 승인 origin의 catalog·asset request와 canonical materialization을 시작한다
+#### Scenario: pinned model 즉시 불러오기
+- **WHEN** 사용자가 명시적으로 catalog를 준비하고 캐릭터를 고른 뒤 두 번째 combobox에서 model을 선택한다
+- **THEN** integration은 해당 generation에서만 승인 origin의 model asset request와 canonical materialization을 즉시 시작한다
+- **AND** 별도의 model `불러오기` 버튼을 요구하지 않는다
+
+#### Scenario: 빠른 model 재선택
+- **WHEN** pinned model이 로딩 중인 상태에서 사용자가 다른 model을 선택한다
+- **THEN** 이전 generation은 abort되고 마지막 선택만 active source를 교체할 수 있다
 
 #### Scenario: source 교체 실패
 - **WHEN** ready Garupa source가 있는 상태에서 새 pack의 import, parse 또는 첫 frame이 실패한다

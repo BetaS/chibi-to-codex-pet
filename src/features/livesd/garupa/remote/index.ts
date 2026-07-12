@@ -15,6 +15,16 @@ export {
   type GarupaRemoteErrorDetails,
 } from './errors'
 export {
+  loadGarupaPinnedCharacterCatalog,
+  localizeGarupaCharacterName,
+  parseGarupaPinnedCharacterCatalog,
+  type GarupaCharacterCatalogResolution,
+  type GarupaLocalizedCharacterNames,
+  type GarupaPinnedCharacterCatalog,
+  type GarupaPinnedCharacterCatalogEntry,
+  type LoadGarupaPinnedCharacterCatalogOptions,
+} from './characterCatalog'
+export {
   materializeGarupaPinnedSnapshot,
   type GarupaCanonicalFileMetadata,
   type GarupaImageDimensions,

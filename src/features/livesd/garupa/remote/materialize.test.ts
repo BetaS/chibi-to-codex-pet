@@ -9,6 +9,7 @@ import {
 import { sha256Hex, type GarupaPinnedResponse } from './network'
 
 const encoder = new TextEncoder()
+const decoder = new TextDecoder()
 const BUILD_DATA_FILE =
   'assets-star-forassetbundle-startapp-sdchara-builddata-00001-builddata.asset'
 const BUILD_DATA_STEM = BUILD_DATA_FILE.replace(/-builddata\.asset$/u, '')
@@ -66,6 +67,59 @@ function fixtureResponses(atlasPage = 'u000_templete.png') {
       new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3]),
     ],
   ])
+}
+
+function mixedCaseModelResponses(options: { readonly collision?: boolean } = {}) {
+  const responses = fixtureResponses()
+  const indexBytes = responses.get('sdchara/_info.json')
+  const buildDataPath = `sdchara/builddata_rip/${BUILD_DATA_FILE}`
+  const buildDataBytes = responses.get(buildDataPath)
+  const skeletonPath = 'sdchara/model/s000_templete_rip/s000_templete.skel'
+  const skeletonBytes = responses.get(skeletonPath)
+  if (!indexBytes || !buildDataBytes || !skeletonBytes) {
+    throw new Error('Synthetic mixed-case fixture is incomplete.')
+  }
+
+  const index = JSON.parse(decoder.decode(indexBytes)) as Record<
+    string,
+    {
+      assetPath: string
+      fileCount: number
+      files: string[]
+      saveDir: string
+    }
+  >
+  delete index['model/s000_templete']
+  const modelEntry = {
+    assetPath: 'sdchara/model/s000_templete_mygo_rip',
+    fileCount: 1,
+    files: ['s000_templete_MyGO.skel'],
+    saveDir: 'sdchara/model/s000_templete_mygo_rip',
+  }
+  index['model/s000_templete_mygo'] = modelEntry
+  if (options.collision) {
+    index['model/s000_templete_MYGO'] = {
+      ...modelEntry,
+      assetPath: 'sdchara/model/s000_templete_mygo_duplicate_rip',
+      saveDir: 'sdchara/model/s000_templete_mygo_duplicate_rip',
+    }
+  }
+  responses.set('sdchara/_info.json', encoder.encode(JSON.stringify(index)))
+
+  const buildData = JSON.parse(decoder.decode(buildDataBytes)) as {
+    Base: {
+      model: { bundleName: string; fileName: string }
+    }
+  }
+  buildData.Base.model.bundleName = 'sdchara/model/s000_templete_MyGO'
+  buildData.Base.model.fileName = 's000_templete_MyGO_SkeletonData.asset'
+  responses.set(buildDataPath, encoder.encode(JSON.stringify(buildData)))
+  responses.delete(skeletonPath)
+  responses.set(
+    'sdchara/model/s000_templete_mygo_rip/s000_templete_MyGO.skel',
+    skeletonBytes,
+  )
+  return responses
 }
 
 async function responseFor(
@@ -140,6 +194,33 @@ describe('Garupa pinned snapshot materialization', () => {
     expect(JSON.stringify(source)).not.toContain('bestdori')
     expect(JSON.stringify(source)).not.toContain('buildData')
     expect(JSON.stringify(source)).not.toContain('jsdelivr')
+  })
+
+  it('resolves a unique mixed-case shared model key from the snapshot index', async () => {
+    const requested: string[] = []
+    const source = await materializeGarupaPinnedSnapshot(
+      '00001',
+      materializeOptions(mixedCaseModelResponses(), requested),
+    )
+
+    expect(requested).toContain(
+      'sdchara/model/s000_templete_mygo_rip/s000_templete_MyGO.skel',
+    )
+    expect(source.metadata.modelName).toBe('s000_templete_MyGO')
+  })
+
+  it('rejects case-folded shared model key collisions before requesting a skeleton', async () => {
+    const requested: string[] = []
+    await expect(
+      materializeGarupaPinnedSnapshot(
+        '00001',
+        materializeOptions(
+          mixedCaseModelResponses({ collision: true }),
+          requested,
+        ),
+      ),
+    ).rejects.toMatchObject({ code: 'GARUPA_REMOTE_SNAPSHOT_INVALID' })
+    expect(requested.some((path) => path.endsWith('.skel'))).toBe(false)
   })
 
   it('rejects unsafe atlas pages atomically before returning a partial source', async () => {
