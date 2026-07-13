@@ -817,8 +817,28 @@ describe('CodexPetBuilder', () => {
     download.addEventListener('click', (event) => event.preventDefault())
     fireEvent.click(download)
     expect(services.trackDownload).toHaveBeenCalledTimes(1)
+    const starPrompt = screen.getByRole('dialog', {
+      name: '만든 Pet이 마음에 드셨나요?',
+    })
+    expect(starPrompt).toHaveAttribute('aria-modal', 'true')
+    const repositoryLink = within(starPrompt).getByRole('link', {
+      name: 'GitHub에서 Star',
+    })
+    expect(repositoryLink).toHaveAttribute(
+      'href',
+      'https://github.com/BetaS/chibi-to-codex-pet',
+    )
+    expect(repositoryLink).toHaveAttribute('target', '_blank')
+    expect(repositoryLink).toHaveAttribute('rel', 'noreferrer')
+    expect(repositoryLink).toHaveFocus()
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(download).toHaveFocus()
+
     fireEvent.click(download)
     expect(services.trackDownload).toHaveBeenCalledTimes(2)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(services.validatePackage).toHaveBeenCalledWith(packageBlob, {
       allowEdgeClipping: true,
     })

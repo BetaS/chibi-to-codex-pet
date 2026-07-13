@@ -1441,6 +1441,109 @@ h1 {
   text-decoration: none;
 }
 
+.github-star-prompt__backdrop {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  display: grid;
+  padding: 1rem;
+  background: rgb(3 5 11 / 76%);
+  backdrop-filter: blur(0.35rem);
+  place-items: center;
+}
+
+.github-star-prompt {
+  position: relative;
+  width: min(100%, 27rem);
+  padding: 1.5rem;
+  border: 1px solid rgb(145 167 255 / 28%);
+  border-radius: 1rem;
+  background: linear-gradient(160deg, #11182a, #0b101c 72%);
+  box-shadow: 0 1.5rem 5rem rgb(0 0 0 / 55%);
+}
+
+.github-star-prompt h2 {
+  max-width: calc(100% - 2.25rem);
+  margin: 0;
+  color: #f2f4ff;
+  font-size: 1.15rem;
+  letter-spacing: -0.02em;
+  line-height: 1.35;
+}
+
+.github-star-prompt p {
+  margin: 0.65rem 0 0;
+  color: #9faac0;
+  font-size: 0.82rem;
+  line-height: 1.65;
+}
+
+.github-star-prompt__close {
+  position: absolute;
+  top: 0.85rem;
+  right: 0.85rem;
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  cursor: pointer;
+  border: 0;
+  border-radius: 0.55rem;
+  color: #8793ab;
+  background: transparent;
+  font-size: 1.25rem;
+  line-height: 1;
+  place-items: center;
+}
+
+.github-star-prompt__close:hover {
+  color: #e9eeff;
+  background: rgb(145 167 255 / 10%);
+}
+
+.github-star-prompt__actions {
+  display: flex;
+  gap: 0.55rem;
+  margin-top: 1.25rem;
+}
+
+.github-star-prompt__repository-link,
+.github-star-prompt__dismiss {
+  display: inline-flex;
+  min-height: 2.65rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0.68rem 0.85rem;
+  cursor: pointer;
+  border-radius: 0.7rem;
+  font-size: 0.76rem;
+  font-weight: 820;
+  text-decoration: none;
+}
+
+.github-star-prompt__repository-link {
+  gap: 0.4rem;
+  border: 0;
+  color: #08101d;
+  background: #a9b7ff;
+}
+
+.github-star-prompt__repository-link:hover {
+  background: #bdc7ff;
+}
+
+.github-star-prompt__dismiss {
+  border: 1px solid rgb(145 167 255 / 24%);
+  color: #aeb9d4;
+  background: rgb(33 43 75 / 44%);
+}
+
+.github-star-prompt__dismiss:hover {
+  border-color: rgb(145 167 255 / 44%);
+  color: #e9eeff;
+  background: rgb(47 61 106 / 52%);
+}
+
 .codex-pet-command {
   display: grid;
   gap: 0.45rem;
@@ -1682,6 +1785,15 @@ h1 {
 
   .codex-pet-installed-preview__caption code {
     margin-left: 0;
+  }
+
+  .github-star-prompt {
+    padding: 1.25rem;
+  }
+
+  .github-star-prompt__actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .app-footer nav {

@@ -30,6 +30,7 @@ import {
   type CodexPetStateId,
 } from './contract'
 import { CodexPetInstalledPreview } from './CodexPetInstalledPreview'
+import { GitHubStarPrompt } from './GitHubStarPrompt'
 import {
   exportCodexPetPackage,
   type ExportedCodexPetPackage,
@@ -388,6 +389,8 @@ function CodexPetBuilderContent({
   const urlsRef = useRef<Pick<BuilderResult, 'packageUrl' | 'spritesheetUrl'> | null>(
     null,
   )
+  const downloadLinkRef = useRef<HTMLAnchorElement>(null)
+  const starPromptShownRef = useRef(false)
   const [description, setDescription] = useState(initialState.description)
   const [globalMirrorX, setGlobalMirrorX] = useState(
     initialState.globalMirrorX,
@@ -404,6 +407,7 @@ function CodexPetBuilderContent({
     useState<LiveSDFrameSamplingProgress | null>(null)
   const [mappingQueryResetKey, setMappingQueryResetKey] = useState(0)
   const [result, setResult] = useState<BuilderResult | null>(null)
+  const [isStarPromptOpen, setIsStarPromptOpen] = useState(false)
   const [installCommandCopyPhase, setInstallCommandCopyPhase] =
     useState<InstallCommandCopyPhase>('idle')
   const animationOptions = useMemo<readonly SearchableComboboxOption[]>(
@@ -821,6 +825,17 @@ function CodexPetBuilderContent({
     phase === 'sampling' || phase === 'packaging' || phase === 'validating'
   const lookMovementPercent = Math.round(lookMovementScale * 100)
 
+  const closeStarPrompt = useCallback(() => {
+    setIsStarPromptOpen(false)
+  }, [])
+  const handleDownload = useCallback(() => {
+    resolvedServices.trackDownload()
+    if (!starPromptShownRef.current) {
+      starPromptShownRef.current = true
+      setIsStarPromptOpen(true)
+    }
+  }, [resolvedServices])
+
   const copyInstallCommand = async () => {
     if (!result?.installCommand || installCommandCopyPhase === 'copying') {
       return
@@ -1082,7 +1097,8 @@ function CodexPetBuilderContent({
                 <a
                   download={result.filename}
                   href={result.packageUrl}
-                  onClick={resolvedServices.trackDownload}
+                  onClick={handleDownload}
+                  ref={downloadLinkRef}
                 >
                   {t('builder.download')}
                 </a>
@@ -1129,6 +1145,11 @@ function CodexPetBuilderContent({
           ) : null}
         </div>
       )}
+      <GitHubStarPrompt
+        isOpen={isStarPromptOpen}
+        onClose={closeStarPrompt}
+        triggerRef={downloadLinkRef}
+      />
     </section>
   )
 }
