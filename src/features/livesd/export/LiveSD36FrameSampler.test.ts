@@ -967,6 +967,39 @@ describe('LiveSD36FrameSampler', () => {
     expect(fixture.canvas.loseContext).toHaveBeenCalledTimes(1)
   })
 
+  it.each([
+    ['eye_scale bone 누락', { eyeBoneMissing: true }],
+    ['표시 가능한 눈 attachment 부족', { eyeAttachmentCount: 1 }],
+    ['불안정한 eye parent matrix', {
+      parentMatrix: { a: 1, b: 2, c: 2, d: 4 },
+    }],
+  ] as const)('%s이면 static look fallback으로 73 frame을 완성한다', async (_label, options) => {
+    const fixture = createSamplerFixture(options)
+
+    await expect(
+      fixture.sampler.sample({
+        atlasBundle: createBundle(),
+        lookRigFallback: 'static',
+        skeletonData: new Uint8Array([1]).buffer,
+        mappings: fixture.mappings,
+      }),
+    ).resolves.toMatchObject({
+      frameCount: CODEX_PET_TOTAL_FRAME_COUNT,
+      height: CODEX_PET_ATLAS_HEIGHT,
+      width: CODEX_PET_ATLAS_WIDTH,
+    })
+
+    expect(
+      fixture.runtime.calls.filter((call) => call.startsWith('draw:')),
+    ).toHaveLength(
+      CODEX_PET_STANDARD_FRAME_COUNT + CODEX_PET_TOTAL_FRAME_COUNT,
+    )
+    expect(fixture.pngEncoder).toHaveBeenCalledTimes(1)
+    expect(fixture.runtime.atlasDispose).toHaveBeenCalledTimes(1)
+    expect(fixture.imageDispose).toHaveBeenCalledTimes(1)
+    expect(fixture.canvas.loseContext).toHaveBeenCalledTimes(1)
+  })
+
   it('특이 eye parent matrix를 LOOK_RIG_MISSING으로 차단한다', async () => {
     const fixture = createSamplerFixture({
       parentMatrix: { a: 1, b: 2, c: 2, d: 4 },

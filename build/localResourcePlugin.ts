@@ -48,6 +48,24 @@ function requestPath(request: IncomingMessage): string | null {
   }
 }
 
+function isStrrOfflineBackupRequest(
+  pathname: string,
+  basePath: string,
+): boolean {
+  const publicAssetsRoot = `${basePath}assets/`
+  if (!pathname.startsWith(publicAssetsRoot)) return false
+
+  const encodedAssetPath = pathname.slice(publicAssetsRoot.length)
+  let assetPath = encodedAssetPath
+  try {
+    assetPath = decodeURIComponent(encodedAssetPath)
+  } catch {
+    // A malformed escape cannot match a valid backup path.
+  }
+
+  return /^strr(?:[-./]|$)/iu.test(assetPath)
+}
+
 export function localResourcePlugin(repositoryRoot: string): Plugin {
   let basePath = '/'
   const runtimeRoot = resolve(
@@ -112,6 +130,13 @@ export function localResourcePlugin(repositoryRoot: string): Plugin {
         const pathname = requestPath(request)
         if (!pathname) {
           next()
+          return
+        }
+
+        if (isStrrOfflineBackupRequest(pathname, basePath)) {
+          response.statusCode = 404
+          response.setHeader('Cache-Control', 'no-store')
+          response.end('Not found')
           return
         }
 

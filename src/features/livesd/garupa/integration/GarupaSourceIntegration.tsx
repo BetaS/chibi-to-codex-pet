@@ -17,10 +17,8 @@ import { CodexPetBuilder } from '../../../codex-pet/CodexPetBuilder'
 import { CodexPetStateShortcuts } from '../../../codex-pet/CodexPetStateShortcuts'
 import type { CodexPetStateId } from '../../../codex-pet/contract'
 import { CODEX_PET_LOOK_MOVEMENT_SCALE_DEFAULT } from '../../../codex-pet/lookMovementScale'
-import {
-  readCodexPetSettingsPresetCatalog,
-  selectCodexPetSettingsPreset,
-} from '../../../codex-pet/settingsPresets'
+import type { CodexPetSettingsPresetGarupaPinnedSource } from '../../../codex-pet/settingsPresets'
+import { useCodexPetPresetSession } from '../../../codex-pet/useCodexPetPresetSession'
 import type { LiveSDFrameSamplingInput } from '../../export/types'
 import {
   LIVE_SD_FRAMING_OFFSET_DEFAULT,
@@ -56,7 +54,10 @@ import {
 } from '../rendering'
 import { createDefaultGarupaSourceController } from './createDefaultGarupaSourceController'
 import type { GarupaSourceController } from './GarupaSourceController'
-import { GarupaSourcePanel } from './GarupaSourcePanel'
+import {
+  GarupaSourcePanel,
+  type GarupaSourcePanelProps,
+} from './GarupaSourcePanel'
 
 const GARUPA_DEFAULT_STATE_MIRROR_X = Object.freeze({
   'running-right': true,
@@ -64,10 +65,12 @@ const GARUPA_DEFAULT_STATE_MIRROR_X = Object.freeze({
 })
 
 export interface GarupaSourceIntegrationProps {
+  readonly characterCatalogLoader?: GarupaSourcePanelProps['characterCatalogLoader']
   readonly controllerFactory?: () => GarupaSourceController
 }
 
 export function GarupaSourceIntegration({
+  characterCatalogLoader,
   controllerFactory = createDefaultGarupaSourceController,
 }: GarupaSourceIntegrationProps = {}) {
   const { t } = useI18n()
@@ -97,9 +100,7 @@ export function GarupaSourceIntegration({
       }),
     [],
   )
-  const [presetCatalog, setPresetCatalog] = useState(() =>
-    readCodexPetSettingsPresetCatalog(),
-  )
+  const presetSession = useCodexPetPresetSession('garupa')
   const [framingScale, setFramingScale] = useState(
     LIVE_SD_FRAMING_SCALE_DEFAULT,
   )
@@ -122,6 +123,38 @@ export function GarupaSourceIntegration({
     ? controller.getActivePreview()
     : null
   const ready = Boolean(activeSource && activePreview)
+  const activePreset = presetSession.appliedCatalog.activePresetName
+    ? presetSession.appliedCatalog.presets[
+        presetSession.appliedCatalog.activePresetName
+      ]
+    : undefined
+  const activePresetSource = activePreset?.source?.provider === 'garupa-pinned'
+    ? activePreset.source
+    : null
+  const activePinnedBundleName = controllerState.active?.kind === 'pinned'
+    ? controllerState.active.sdAssetBundleName
+    : null
+  const currentPresetSource: CodexPetSettingsPresetGarupaPinnedSource | null =
+    controllerState.active?.kind === 'pinned'
+      ? {
+          provider: 'garupa-pinned',
+          sdAssetBundleName: controllerState.active.sdAssetBundleName,
+        }
+      : null
+  const builderSource = useMemo(
+    () => ready && activeSource
+      ? {
+          ...activeSource,
+          ...(controllerState.active?.defaultDisplayName
+            ? {
+                defaultDisplayName:
+                  controllerState.active.defaultDisplayName,
+              }
+            : {}),
+        }
+      : null,
+    [activeSource, controllerState.active, ready],
+  )
 
   const animationOptions = useMemo<readonly SearchableComboboxOption[]>(
     () =>
@@ -202,49 +235,70 @@ export function GarupaSourceIntegration({
     }
   }, [activePreview])
 
-  const loadSelectedSource = useCallback(() => {
+  const loadSelectedSource = useCallback(async () => {
     const canvas = canvasRef.current
-    if (canvas) {
-      void controller.load(canvas).then((loaded) => {
-        if (!loaded) {
-          return
-        }
-        const nextPreview = controller.getActivePreview()
-        if (!nextPreview) {
-          return
-        }
-
-        previewRef.current = nextPreview
-        mappingsRef.current = null
-        activeStateIdRef.current = null
-        globalMirrorXRef.current = false
-        lookTargetRef.current = null
-        lookMovementScaleRef.current = CODEX_PET_LOOK_MOVEMENT_SCALE_DEFAULT
-
-        try {
-          nextPreview.setFramingScale(LIVE_SD_FRAMING_SCALE_DEFAULT)
-          nextPreview.setFramingOffset(LIVE_SD_FRAMING_OFFSET_DEFAULT)
-          nextPreview.setMirrorX(false)
-          nextPreview.setLookTarget(null)
-          setPreviewControlError(false)
-        } catch {
-          setPreviewControlError(true)
-        }
-
-        setFramingScale(LIVE_SD_FRAMING_SCALE_DEFAULT)
-        setFramingOffset(LIVE_SD_FRAMING_OFFSET_DEFAULT)
-        setCurrentAnimation(nextPreview.currentAnimation)
-        setCodexPetMappings(null)
-        setActivePreviewStateId(null)
-        setAnimationQueryResetKey((key) => key + 1)
-        setBuilderSessionGeneration((generation) => generation + 1)
-      })
+    if (!canvas || !await controller.load(canvas)) {
+      return
     }
+    const nextPreview = controller.getActivePreview()
+    if (!nextPreview) {
+      return
+    }
+
+    previewRef.current = nextPreview
+    mappingsRef.current = null
+    activeStateIdRef.current = null
+    globalMirrorXRef.current = false
+    lookTargetRef.current = null
+    lookMovementScaleRef.current = CODEX_PET_LOOK_MOVEMENT_SCALE_DEFAULT
+
+    try {
+      nextPreview.setFramingScale(LIVE_SD_FRAMING_SCALE_DEFAULT)
+      nextPreview.setFramingOffset(LIVE_SD_FRAMING_OFFSET_DEFAULT)
+      nextPreview.setMirrorX(false)
+      nextPreview.setLookTarget(null)
+      setPreviewControlError(false)
+    } catch {
+      setPreviewControlError(true)
+    }
+
+    setFramingScale(LIVE_SD_FRAMING_SCALE_DEFAULT)
+    setFramingOffset(LIVE_SD_FRAMING_OFFSET_DEFAULT)
+    setCurrentAnimation(nextPreview.currentAnimation)
+    setCodexPetMappings(null)
+    setActivePreviewStateId(null)
+    setAnimationQueryResetKey((key) => key + 1)
+    setBuilderSessionGeneration((generation) => generation + 1)
   }, [controller])
 
-  const selectPreset = useCallback((presetName: string | null) => {
-    setPresetCatalog(selectCodexPetSettingsPreset(presetName))
-  }, [])
+  useEffect(() => {
+    if (
+      !activePresetSource ||
+      activePresetSource.sdAssetBundleName === activePinnedBundleName
+    ) {
+      return
+    }
+    const loadTimer = window.setTimeout(() => {
+      controller.selectPinned(activePresetSource.sdAssetBundleName)
+      void loadSelectedSource()
+    }, 0)
+    return () => window.clearTimeout(loadTimer)
+  }, [
+    activePinnedBundleName,
+    activePresetSource,
+    controller,
+    loadSelectedSource,
+    presetSession.loadGeneration,
+  ])
+
+  const handlePresetSelectionChange = useCallback((
+    presetName: string | null,
+  ) => {
+    if (presetName === null) {
+      controller.clearSelection()
+    }
+    presetSession.selectPreset(presetName)
+  }, [controller, presetSession])
 
   const applyPreviewMirrorX = useCallback((mirrorX: boolean) => {
     try {
@@ -404,16 +458,19 @@ export function GarupaSourceIntegration({
     <>
       <div className="workspace-grid">
         <GarupaSourcePanel
+          {...(characterCatalogLoader ? { characterCatalogLoader } : {})}
           controller={controller}
           onLoad={loadSelectedSource}
-          onPresetSelectionChange={selectPreset}
-          presetCatalog={presetCatalog}
+          onPresetLoad={presetSession.loadSelectedPreset}
+          onPresetSelectionChange={handlePresetSelectionChange}
+          presetCatalog={presetSession.catalog}
+          selectedPresetName={presetSession.selectedPresetName}
         />
 
         <section className="preview-panel" aria-labelledby="garupa-preview-title">
           <div className="preview-toolbar">
             <div>
-              <p className="toolbar-label">WebGL preview</p>
+              <p className="toolbar-label">{t('game.garupa')}</p>
               <h2 id="garupa-preview-title">
                 {activeSource?.atlasBundle.sourceName ??
                   t('garupa.characterPreview')}
@@ -578,19 +635,23 @@ export function GarupaSourceIntegration({
 
         <CodexPetBuilder
           animations={activePreview?.animations ?? []}
+          defaultGlobalMirrorX={false}
           defaultStateMirrorX={GARUPA_DEFAULT_STATE_MIRROR_X}
           framingOffset={framingOffset}
           framingScale={framingScale}
           onFramingChange={applyFraming}
           onGlobalMirrorXChange={handleGlobalMirrorXChange}
           onMappingsChange={handleMappingsChange}
-          onPresetCatalogChange={setPresetCatalog}
+          onPresetCatalogChange={presetSession.updateCatalog}
           onPreviewAnimationChange={playStateAnimation}
           onPreviewLookMovementScaleChange={updatePreviewLookMovementScale}
-          presetCatalog={presetCatalog}
+          presetCatalog={presetSession.appliedCatalog}
+          presetLoadGeneration={presetSession.loadGeneration}
+          presetRuntime="garupa"
+          presetSource={currentPresetSource}
           recipeSource={null}
           services={services}
-          source={ready ? activeSource : null}
+          source={builderSource}
           key={builderSessionGeneration}
         />
       </div>

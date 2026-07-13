@@ -130,7 +130,7 @@ Foundation 계층은 app shell, 공통 UI와 composition을 소유하고, LiveSD
 - **AND** browser option은 runtime에 불러온 catalog와 skeleton에서만 생성되어야 한다
 
 ### Requirement: 허용된 browser persistence 경계
-Production browser code의 same-origin persistence key는 `chibi-to-codex-pet.locale.v1`과 `chibi-to-codex-pet.pet-presets.v1` 두 개로 제한되어야 한다(MUST). Locale persistence와 Pet preset repository가 각각의 `localStorage` access를 소유해야 하며(MUST), preset field는 metadata, framing, look scale과 animation·mirror mapping allowlist를 따라야 한다(MUST). Production source와 bundle은 `sessionStorage`와 `indexedDB`를 사용해서는 안 되며(MUST NOT), source와 생성 결과는 session memory에서 관리해야 한다(MUST).
+Production browser code의 same-origin writable persistence key는 `chibi-to-codex-pet.locale.v1`, `chibi-to-codex-pet.pet-presets.prsk.v1`, `chibi-to-codex-pet.pet-presets.strr.v1`, `chibi-to-codex-pet.pet-presets.garupa.v1`로 제한되어야 한다(MUST). 이전 `chibi-to-codex-pet.pet-presets.v1`은 runtime별 key가 없을 때 source provider별 migration을 위한 read-only 입력으로만 허용해야 한다(MAY). Locale persistence와 Pet preset repository가 각각의 `localStorage` access를 소유해야 하며(MUST), preset field는 metadata, framing, look scale과 animation·mirror mapping allowlist를 따라야 한다(MUST). Production source와 bundle은 `sessionStorage`와 `indexedDB`를 사용해서는 안 되며(MUST NOT), source와 생성 결과는 session memory에서 관리해야 한다(MUST).
 
 #### Scenario: production storage allowlist
 - **WHEN** production source와 bundle을 persistence verifier로 검사한다

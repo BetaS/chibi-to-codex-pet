@@ -29,7 +29,7 @@ describe('loadDevelopmentCharacterPack', () => {
 
     const result = await loadDevelopmentCharacterPack({ fetcher })
 
-    expect(result.sourceName).toBe('sd_mob003 (기본 링크)')
+    expect(result.sourceName).toBe('sd_mob003 (기본 캐릭터)')
     expect([...result.atlasPages.keys()]).toEqual(['page.png'])
     expect(fetcher).toHaveBeenNthCalledWith(1, DEVELOPMENT_CHARACTER_ATLAS_URL, {
       cache: 'no-store',

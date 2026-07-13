@@ -192,9 +192,9 @@ async function loadCustomRemoteCatalog(
   user: AppUser,
   assetBaseUrl = 'https://assets.example.test/area_sd',
 ): Promise<HTMLInputElement> {
-  await user.click(screen.getByRole('radio', { name: 'Custom provider' }))
+  await user.click(screen.getByRole('radio', { name: '다른 서버' }))
   const urlInput = screen.getByRole('textbox', {
-    name: '원격 asset base URL',
+    name: '캐릭터 서버 URL',
   })
   await user.type(urlInput, assetBaseUrl)
   await user.click(screen.getByRole('button', { name: '불러오기' }))
@@ -215,7 +215,7 @@ async function uploadInputs(
   fileName = 'character.zip',
 ): Promise<void> {
   const user = userEvent.setup()
-  await user.click(screen.getByRole('radio', { name: '리소스 업로드' }))
+  await user.click(screen.getByRole('radio', { name: '파일에서 불러오기' }))
   const [skeletonInput, archiveInput] = fileInputs(container)
   if (!skeletonInput || !archiveInput) {
     throw new Error('Expected skeleton and archive inputs')
@@ -227,7 +227,7 @@ async function uploadInputs(
     new File(['zip'], fileName, { type: 'application/zip' }),
   )
   await user.click(
-    screen.getByRole('button', { name: '가져와서 미리보기' }),
+    screen.getByRole('button', { name: '캐릭터 미리보기' }),
   )
 }
 
@@ -257,23 +257,34 @@ afterEach(() => {
 })
 
 describe('App', () => {
-  it('준비중 STRR 탭은 선택·요청·현재 PRSK 상태를 변경하지 않는다', async () => {
+  it('레뷰 스타라이트 탭에서 공통 preview와 Codex Pet builder를 활성화한다', async () => {
     const user = userEvent.setup()
-    const catalogSpy = vi.spyOn(prskRemoteCatalogSource, 'load')
-    const modelSpy = vi.spyOn(prskRemoteResourceSource, 'load')
     render(<App />)
 
     const prskTab = screen.getByRole('tab', { name: '프로세카' })
-    const strrTab = screen.getByRole('tab', {
-      name: /레뷰 스타라이트.*준비중/,
-    })
+    const strrTab = screen.getByRole('tab', { name: '레뷰 스타라이트' })
+    expect(strrTab).toBeEnabled()
+
     await user.click(strrTab)
 
-    expect(prskTab).toHaveAttribute('aria-selected', 'true')
-    expect(strrTab).toHaveAttribute('aria-selected', 'false')
-    expect(screen.getByRole('radio', { name: '기본 제공 리소스' })).toBeChecked()
-    expect(catalogSpy).not.toHaveBeenCalled()
-    expect(modelSpy).not.toHaveBeenCalled()
+    expect(prskTab).toHaveAttribute('aria-selected', 'false')
+    expect(strrTab).toHaveAttribute('aria-selected', 'true')
+    expect(
+      await screen.findByRole('heading', {
+        level: 2,
+        name: '캐릭터 선택',
+      }),
+    ).toBeVisible()
+    expect(screen.getByRole('button', {
+      name: '캐릭터 목록 불러오기',
+    })).toBeEnabled()
+    expect(screen.getByRole('combobox', { name: '캐릭터 검색' })).toBeDisabled()
+    expect(
+      screen.getByRole('heading', { level: 2, name: 'Codex Pet 만들기' }),
+    ).toBeVisible()
+    expect(screen.getByRole('slider', {
+      name: 'Pet 크기 슬라이더',
+    })).toBeDisabled()
   })
 
   it('BanG Dream 탭을 선택하면 Garupa source와 builder를 활성화한다', async () => {
@@ -291,11 +302,11 @@ describe('App', () => {
     expect(
       screen.getByRole('heading', {
         level: 2,
-        name: '라이브 리소스 팩',
+        name: '캐릭터 선택',
       }),
     ).toBeVisible()
     expect(
-      screen.getByRole('button', { name: '라이브 리소스 목록 불러오기' }),
+      screen.getByRole('button', { name: '캐릭터 목록 불러오기' }),
     ).toBeEnabled()
     expect(screen.getByRole('combobox', { name: '캐릭터' })).toBeDisabled()
     expect(screen.getByRole('combobox', { name: '모델' })).toBeDisabled()
@@ -306,20 +317,20 @@ describe('App', () => {
     ).toBeVisible()
     expect(screen.getByText('아직 표시할 캐릭터가 없습니다.')).toBeVisible()
     expect(screen.getByLabelText('Pet 크기 슬라이더')).toBeDisabled()
-    expect(screen.getByLabelText('Garupa Spine WebGL 미리보기')).toHaveAttribute(
+    expect(screen.getByLabelText('Garupa 캐릭터 미리보기')).toHaveAttribute(
       'width',
       '192',
     )
     expect(
-      screen.getByLabelText('Garupa Spine WebGL 미리보기').closest(
+      screen.getByLabelText('Garupa 캐릭터 미리보기').closest(
         '.preview-panel',
       ),
     ).not.toBeNull()
     expect(
-      screen.getByRole('heading', { level: 2, name: 'Codex Pet 패키징' }),
+      screen.getByRole('heading', { level: 2, name: 'Codex Pet 만들기' }),
     ).toBeVisible()
     expect(
-      screen.getByText('먼저 LiveSD 모델 미리보기를 준비하세요.'),
+      screen.getByText('먼저 캐릭터를 불러와주세요.'),
     ).toBeVisible()
   })
 
@@ -333,14 +344,12 @@ describe('App', () => {
 
     await user.click(screen.getByRole('tab', { name: 'BanG Dream!' }))
     expect(
-      screen.getByRole('button', { name: '라이브 리소스 목록 불러오기' }),
+      screen.getByRole('button', { name: '캐릭터 목록 불러오기' }),
     ).toBeEnabled()
     expect(screen.getByRole('combobox', { name: '캐릭터' })).toBeDisabled()
     expect(screen.getByRole('combobox', { name: '모델' })).toBeDisabled()
     expect(
-      screen.getByText(
-        '목록을 불러오고 캐릭터와 모델을 선택하세요. 아직 모델 요청은 시작되지 않았습니다.',
-      ),
+      screen.getByText('캐릭터 목록을 불러온 뒤 캐릭터와 모델을 선택해주세요.'),
     ).toBeVisible()
   })
 
@@ -362,7 +371,108 @@ describe('App', () => {
     expect(createSpy).not.toHaveBeenCalled()
   })
 
-  it('리소스 선택 전에 확정한 preset을 이후 source 전체 설정에 적용한다', async () => {
+  it('각 런타임의 preset catalog와 active 선택을 서로 격리한다', async () => {
+    const user = userEvent.setup()
+    const mappings = Object.fromEntries(
+      CODEX_PET_STATES.map(({ id }) => [
+        id,
+        { animationName: 'idle', mirrorX: false },
+      ]),
+    ) as unknown as CodexPetAnimationMappings
+    saveCodexPetSettingsPreset({
+      description: 'PRSK settings',
+      displayName: 'PRSK Preset',
+      framingOffset: { x: 0, y: 0 },
+      framingScale: 1,
+      globalMirrorX: false,
+      lookMovementScale: 1,
+      mappings,
+    }, localStorage, 1)
+    saveCodexPetSettingsPreset({
+      description: 'STRR settings',
+      displayName: 'STRR Preset',
+      framingOffset: { x: 0, y: 0 },
+      framingScale: 1,
+      globalMirrorX: true,
+      lookMovementScale: 1,
+      mappings,
+    }, localStorage, 2, 'strr')
+    saveCodexPetSettingsPreset({
+      description: 'Garupa settings',
+      displayName: 'Garupa Preset',
+      framingOffset: { x: 0, y: 0 },
+      framingScale: 1,
+      globalMirrorX: false,
+      lookMovementScale: 1,
+      mappings,
+    }, localStorage, 3, 'garupa')
+
+    render(<App />)
+
+    expect(screen.getByTestId('resource-preset-selector')).toHaveValue(
+      'PRSK Preset',
+    )
+    expect(screen.queryByRole('option', { name: 'STRR Preset' }))
+      .not.toBeInTheDocument()
+    expect(screen.getByRole('button', {
+      name: '프리셋 불러오기',
+    })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '불러오기' })).toBeDisabled()
+
+    await user.click(screen.getByRole('tab', { name: '레뷰 스타라이트' }))
+    expect(screen.getByTestId('strr-resource-preset-selector')).toHaveValue(
+      'STRR Preset',
+    )
+    expect(screen.queryByRole('option', { name: 'PRSK Preset' }))
+      .not.toBeInTheDocument()
+    expect(screen.getByRole('button', {
+      name: '프리셋 불러오기',
+    })).toBeEnabled()
+    expect(screen.getByRole('button', {
+      name: '캐릭터 목록 불러오기',
+    })).toBeDisabled()
+
+    await user.click(screen.getByRole('tab', { name: 'BanG Dream!' }))
+    expect(screen.getByTestId('garupa-resource-preset-selector')).toHaveValue(
+      'Garupa Preset',
+    )
+    expect(screen.queryByRole('option', { name: 'STRR Preset' }))
+      .not.toBeInTheDocument()
+    expect(screen.getByRole('button', {
+      name: '프리셋 불러오기',
+    })).toBeEnabled()
+    expect(screen.getByRole('button', {
+      name: '캐릭터 목록 불러오기',
+    })).toBeDisabled()
+
+    await user.selectOptions(
+      screen.getByTestId('garupa-resource-preset-selector'),
+      '',
+    )
+    expect(screen.getByRole('button', {
+      name: '프리셋 불러오기',
+    })).toBeDisabled()
+    expect(screen.getByRole('button', {
+      name: '캐릭터 목록 불러오기',
+    })).toBeEnabled()
+
+    expect(
+      readCodexPetSettingsPresetCatalog(localStorage, 'garupa').activePresetName,
+    ).toBeNull()
+    expect(
+      readCodexPetSettingsPresetCatalog(localStorage, 'prsk').activePresetName,
+    ).toBe('PRSK Preset')
+    expect(
+      readCodexPetSettingsPresetCatalog(localStorage, 'strr').activePresetName,
+    ).toBe('STRR Preset')
+
+    await user.click(screen.getByRole('tab', { name: '프로세카' }))
+    expect(screen.getByTestId('resource-preset-selector')).toHaveValue(
+      'PRSK Preset',
+    )
+  })
+
+  it('리소스 선택 전에 명시적으로 불러온 preset을 이후 source 전체 설정에 적용한다', async () => {
     const user = userEvent.setup()
     const mappings = Object.fromEntries(
       CODEX_PET_STATES.map(({ id }) => [
@@ -403,7 +513,7 @@ describe('App', () => {
       name: '저장 프리셋',
     })
     const sourceSelector = screen.getByRole('radio', {
-      name: '기본 제공 리소스',
+      name: '기본 캐릭터',
     })
 
     expect(presetSelector).toHaveValue('Airi First')
@@ -414,8 +524,14 @@ describe('App', () => {
     await user.selectOptions(presetSelector, 'Miku First')
     expect(
       readCodexPetSettingsPresetCatalog(localStorage).activePresetName,
-    ).toBe('Miku First')
+    ).toBe('Airi First')
     expect(createSpy).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', {
+      name: '프리셋 불러오기',
+    }))
+    expect(
+      readCodexPetSettingsPresetCatalog(localStorage).activePresetName,
+    ).toBe('Miku First')
 
     await uploadInputs(container, 'preset-first-source.zip')
     await screen.findByRole('heading', { name: 'preset-first-source' })
@@ -442,7 +558,7 @@ describe('App', () => {
     expect(fixture.setMirrorX).toHaveBeenLastCalledWith(true)
   })
 
-  it('원격 source가 저장된 preset을 복원하고 변경 즉시 캐릭터를 불러온다', async () => {
+  it('원격 source preset은 명시적 불러오기 뒤에만 캐릭터를 복원한다', async () => {
     const user = userEvent.setup()
     const mappings = Object.fromEntries(
       CODEX_PET_STATES.map(({ id }) => [
@@ -508,6 +624,15 @@ describe('App', () => {
       'true',
     )
     expect(screen.getByText('아직 표시할 캐릭터가 없습니다.')).toBeVisible()
+    expect(catalogSpy).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: '불러오기' })).toBeDisabled()
+    expect(screen.getByRole('button', {
+      name: '프리셋 불러오기',
+    })).toBeEnabled()
+    await user.click(screen.getByRole('button', {
+      name: '프리셋 불러오기',
+    }))
+    await waitFor(() => expect(catalogSpy).toHaveBeenCalledOnce())
     catalogDeferred.resolve(catalog)
     await screen.findByRole('heading', { name: 'sd_21miku_street' })
     expect(screen.getByTestId('livesd-preview-border-box')).toBeVisible()
@@ -520,6 +645,10 @@ describe('App', () => {
       screen.getByRole('combobox', { name: '저장 프리셋' }),
       'Miku Remote',
     )
+    expect(catalogSpy).toHaveBeenCalledTimes(1)
+    await user.click(screen.getByRole('button', {
+      name: '프리셋 불러오기',
+    }))
 
     await screen.findByRole('heading', { name: 'sd_21miku_normal' })
     expect(catalogSpy).toHaveBeenCalledTimes(2)
@@ -540,7 +669,7 @@ describe('App', () => {
     expect(mikuSession.setMirrorX).toHaveBeenLastCalledWith(true)
   })
 
-  it('원격 preset 자동 로드 중 새 세션을 선택하면 이전 요청을 취소한다', async () => {
+  it('원격 preset 불러오기 중 새 세션을 선택하면 이전 요청을 취소한다', async () => {
     const user = userEvent.setup()
     const catalogDeferred = createDeferred<PrskRemoteCatalog>()
     const mappings = Object.fromEntries(
@@ -569,6 +698,11 @@ describe('App', () => {
     const createSpy = vi.spyOn(liveSD36Adapter, 'createPreview')
 
     render(<App />)
+    expect(catalogSpy).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: '불러오기' })).toBeDisabled()
+    await user.click(screen.getByRole('button', {
+      name: '프리셋 불러오기',
+    }))
     await waitFor(() => expect(catalogSpy).toHaveBeenCalledOnce())
     await user.selectOptions(
       screen.getByRole('combobox', { name: '저장 프리셋' }),
@@ -587,6 +721,10 @@ describe('App', () => {
       'aria-hidden',
       'true',
     )
+    expect(screen.getByRole('button', {
+      name: '프리셋 불러오기',
+    })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '불러오기' })).toBeEnabled()
   })
 
   it('기본 제공 resource는 단일 불러오기 action으로 canonical catalog를 요청한다', async () => {
@@ -619,20 +757,24 @@ describe('App', () => {
       }),
     ).toBeInTheDocument()
     expect(
-      screen.getByText('기본 제공 리소스를 선택했습니다. 불러오기를 실행하세요.'),
+      screen.getByText('캐릭터 목록을 보려면 불러오기를 눌러주세요.'),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('radio', { name: '기본 제공 리소스' }),
+      screen.getByRole('radio', { name: '기본 캐릭터' }),
     ).toBeChecked()
     expect(screen.getByRole('tab', { name: '프로세카' })).toHaveAttribute(
       'aria-selected',
       'true',
     )
     expect(
-      screen.getByRole('tab', { name: /레뷰 스타라이트.*준비중/ }),
-    ).toBeDisabled()
+      screen.getByRole('tab', { name: '레뷰 스타라이트' }),
+    ).toBeEnabled()
     expect(screen.getByRole('tab', { name: 'BanG Dream!' })).toBeEnabled()
-    expect(screen.getByText('prsk-chibi-viewer manifest')).toBeVisible()
+    expect(
+      screen.getByText('기본 캐릭터', {
+        selector: '.provided-resource-card strong',
+      }),
+    ).toBeVisible()
     expect(screen.getByTestId('livesd-preview-border-box')).toHaveAttribute(
       'aria-hidden',
       'true',
@@ -646,7 +788,7 @@ describe('App', () => {
     ).toBeDisabled()
     expect(screen.getByText('100%', { selector: 'output' })).toBeVisible()
     expect(
-      screen.getByRole('button', { name: '프레이밍 초기화' }),
+      screen.getByRole('button', { name: '위치와 크기 초기화' }),
     ).toBeDisabled()
     expect(container.querySelector('[aria-live="polite"]')).toBeInTheDocument()
     expect(screen.queryByText(/best_effort|experimental|verified/)).not.toBeInTheDocument()
@@ -668,13 +810,13 @@ describe('App', () => {
       { name: 'page.png', content: 'png' },
     ])
     const { container } = render(<App />)
-    await user.click(screen.getByRole('radio', { name: '리소스 업로드' }))
+    await user.click(screen.getByRole('radio', { name: '파일에서 불러오기' }))
     const archiveInput = fileInputs(container)[1]
     if (!archiveInput) throw new Error('Expected archive input')
 
     await user.upload(archiveInput, archive)
     expect(
-      screen.getByRole('button', { name: '가져와서 미리보기' }),
+      screen.getByRole('button', { name: '캐릭터 미리보기' }),
     ).toBeDisabled()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
@@ -686,7 +828,7 @@ describe('App', () => {
       { name: 'page.png', content: 'png' },
     ])
     const { container } = render(<App />)
-    await user.click(screen.getByRole('radio', { name: '리소스 업로드' }))
+    await user.click(screen.getByRole('radio', { name: '파일에서 불러오기' }))
     const [skeletonInput, archiveInput] = fileInputs(container)
     if (!skeletonInput || !archiveInput) throw new Error('Expected file inputs')
 
@@ -698,12 +840,12 @@ describe('App', () => {
     )
     await user.upload(archiveInput, archive)
     await user.click(
-      screen.getByRole('button', { name: '가져와서 미리보기' }),
+      screen.getByRole('button', { name: '캐릭터 미리보기' }),
     )
 
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('SHARED_SKELETON_INVALID_TYPE')
-    expect(alert).toHaveTextContent('.skel 파일이어야')
+    expect(alert).toHaveTextContent('유효한 공통 `.skel` 파일을 선택하고 다시 시도하세요.')
   })
 
   it('알 수 없는 예외를 raw 내용 없이 PREVIEW_UNKNOWN_ERROR로 정규화한다', () => {
@@ -772,10 +914,10 @@ describe('App', () => {
       name: 'Pet 크기 슬라이더',
     })
     const reset = screen.getByRole('button', {
-      name: '프레이밍 초기화',
+      name: '위치와 크기 초기화',
     })
-    const offsetX = screen.getByRole('slider', { name: '가로 cell 위치' })
-    const offsetY = screen.getByRole('slider', { name: '세로 cell 위치' })
+    const offsetX = screen.getByRole('slider', { name: '가로 위치' })
+    const offsetY = screen.getByRole('slider', { name: '세로 위치' })
     expect(slider).toBeEnabled()
     expect(slider).toHaveAttribute('min', '80')
     expect(slider).toHaveAttribute('max', '150')
@@ -905,7 +1047,7 @@ describe('App', () => {
     expect(catalogSpy).not.toHaveBeenCalled()
     expect(modelSpy).not.toHaveBeenCalled()
 
-    const canvas = screen.getByLabelText('LiveSD WebGL 미리보기')
+    const canvas = screen.getByLabelText('프로세카 캐릭터 미리보기')
     vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
       bottom: 250,
       height: 200,
@@ -988,7 +1130,7 @@ describe('App', () => {
     expect(screen.getByRole('slider', {
       name: 'Pet size slider',
     })).toHaveValue('84')
-    expect(screen.getByText('Playing the locale-state-source preview.')).toBeVisible()
+    expect(screen.getByText('Previewing locale-state-source.')).toBeVisible()
     expect(createSpy).toHaveBeenCalledTimes(1)
     expect(importSpy).toHaveBeenCalledTimes(1)
     expect(catalogSpy).not.toHaveBeenCalled()
@@ -1014,7 +1156,7 @@ describe('App', () => {
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('ATLAS_PAGE_MISSING')
     expect(alert).toHaveTextContent('nested/page.png')
-    expect(alert).toHaveTextContent('atlas or one of its image pages')
+    expect(alert).toHaveTextContent('Some character images are missing or unreadable.')
     expect(alert).not.toHaveTextContent('참조하는 PNG')
   })
 
@@ -1036,7 +1178,7 @@ describe('App', () => {
 
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('PREVIEW_RENDER_FAILED')
-    expect(alert).toHaveTextContent('계속 렌더링하지 못했습니다')
+    expect(alert).toHaveTextContent('예상하지 못한 오류가 발생했습니다')
     expect(screen.getByRole('heading', { name: '캐릭터 미리보기' })).toBeVisible()
     expect(fixture.unsubscribe).toHaveBeenCalledTimes(1)
   })
@@ -1087,7 +1229,7 @@ describe('App', () => {
       new File(['zip'], 'second.zip', { type: 'application/zip' }),
     )
     await user.click(
-      screen.getByRole('button', { name: '가져와서 미리보기' }),
+      screen.getByRole('button', { name: '캐릭터 미리보기' }),
     )
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(2))
     expect(importSpy).toHaveBeenCalledTimes(2)
@@ -1124,9 +1266,9 @@ describe('App', () => {
 
     render(<App />)
 
-    expect(screen.getByRole('radio', { name: '기본 제공 리소스' })).toBeChecked()
+    expect(screen.getByRole('radio', { name: '기본 캐릭터' })).toBeChecked()
     expect(screen.queryByRole('textbox', {
-      name: '원격 asset base URL',
+      name: '캐릭터 서버 URL',
     })).not.toBeInTheDocument()
     expect(catalogSpy).not.toHaveBeenCalled()
     expect(modelSpy).not.toHaveBeenCalled()
@@ -1146,9 +1288,9 @@ describe('App', () => {
     expect(inspectSpy).not.toHaveBeenCalled()
     expect(createSpy).not.toHaveBeenCalled()
 
-    await user.click(screen.getByRole('radio', { name: 'Custom provider' }))
+    await user.click(screen.getByRole('radio', { name: '다른 서버' }))
     expect(screen.getByRole('textbox', {
-      name: '원격 asset base URL',
+      name: '캐릭터 서버 URL',
     })).toHaveAttribute('placeholder', 'https://provider.example/area_sd')
     expect(catalogSpy).not.toHaveBeenCalled()
   })
@@ -1173,9 +1315,9 @@ describe('App', () => {
     const modelSpy = vi.spyOn(prskRemoteResourceSource, 'load')
 
     render(<App />)
-    await user.click(screen.getByRole('radio', { name: 'Custom provider' }))
+    await user.click(screen.getByRole('radio', { name: '다른 서버' }))
     await user.type(
-      screen.getByRole('textbox', { name: '원격 asset base URL' }),
+      screen.getByRole('textbox', { name: '캐릭터 서버 URL' }),
       'https://assets.example.test/area_sd',
     )
     await user.click(screen.getByRole('button', { name: '불러오기' }))
@@ -1185,11 +1327,11 @@ describe('App', () => {
     })
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('REMOTE_CATALOG_EMPTY')
-    expect(alert).toHaveTextContent('사용할 수 있는 캐릭터가 없습니다')
+    expect(alert).toHaveTextContent('캐릭터 목록을 불러오지 못했습니다')
     expect(characterCombobox).toBeDisabled()
     expect(
       within(comboboxRoot(characterCombobox)).getByRole('status'),
-    ).toHaveTextContent('사용할 수 있는 캐릭터가 없습니다')
+    ).toHaveTextContent('캐릭터 목록을 불러오지 못했습니다')
     expect(modelSpy).not.toHaveBeenCalled()
 
     await user.click(screen.getByRole('button', { name: '불러오기' }))
@@ -1202,7 +1344,7 @@ describe('App', () => {
     expect(characterCombobox).toBeDisabled()
     expect(
       within(comboboxRoot(characterCombobox)).getByRole('status'),
-    ).toHaveTextContent('CORS 설정을 확인하세요')
+    ).toHaveTextContent('네트워크와 URL을 확인해주세요')
 
     await user.click(screen.getByRole('button', { name: '불러오기' }))
 
@@ -1552,9 +1694,9 @@ describe('App', () => {
       .mockResolvedValue(latestFixture.session)
 
     render(<App />)
-    await user.click(screen.getByRole('radio', { name: 'Custom provider' }))
+    await user.click(screen.getByRole('radio', { name: '다른 서버' }))
     await user.type(
-      screen.getByRole('textbox', { name: '원격 asset base URL' }),
+      screen.getByRole('textbox', { name: '캐릭터 서버 URL' }),
       'https://assets.example.test/area_sd',
     )
     await user.click(screen.getByRole('button', { name: '불러오기' }))
@@ -1565,7 +1707,7 @@ describe('App', () => {
     expect(catalogSpy).toHaveBeenCalledTimes(1)
 
     await user.type(
-      screen.getByRole('textbox', { name: '원격 asset base URL' }),
+      screen.getByRole('textbox', { name: '캐릭터 서버 URL' }),
       '/v2',
     )
 
@@ -1701,9 +1843,9 @@ describe('App', () => {
     const createSpy = vi.spyOn(liveSD36Adapter, 'createPreview')
 
     render(<App />)
-    await user.click(screen.getByRole('radio', { name: 'Custom provider' }))
+    await user.click(screen.getByRole('radio', { name: '다른 서버' }))
     const urlInput = screen.getByRole('textbox', {
-      name: '원격 asset base URL',
+      name: '캐릭터 서버 URL',
     })
     await user.type(urlInput, 'https://assets.example.test/area_sd')
     await user.click(screen.getByRole('button', { name: '불러오기' }))
@@ -1725,7 +1867,7 @@ describe('App', () => {
     const modelSignal = modelSpy.mock.calls[0]?.[0].signal
 
     expect(modelSignal?.aborted).toBe(false)
-    await user.click(screen.getByRole('radio', { name: '리소스 업로드' }))
+    await user.click(screen.getByRole('radio', { name: '파일에서 불러오기' }))
 
     expect(modelSignal?.aborted).toBe(true)
     expect(screen.queryByRole('combobox', {

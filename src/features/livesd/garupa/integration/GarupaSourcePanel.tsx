@@ -8,6 +8,7 @@ import {
 } from 'react'
 
 import { useI18n } from '../../../../i18n'
+import { CodexPetPresetLoader } from '../../../codex-pet/CodexPetPresetLoader'
 import type { CodexPetSettingsPresetCatalog } from '../../../codex-pet/settingsPresets'
 import {
   SearchableCombobox,
@@ -33,8 +34,10 @@ interface GarupaCharacterModelGroup {
 export interface GarupaSourcePanelProps {
   readonly controller: GarupaSourceController
   readonly onLoad: () => void
+  readonly onPresetLoad: () => void
   readonly onPresetSelectionChange: (presetName: string | null) => void
   readonly presetCatalog: CodexPetSettingsPresetCatalog
+  readonly selectedPresetName: string | null
   readonly characterCatalogLoader?: typeof loadGarupaPinnedCharacterCatalog
 }
 
@@ -82,8 +85,10 @@ function groupCharacterModels(
 export function GarupaSourcePanel({
   controller,
   onLoad,
+  onPresetLoad,
   onPresetSelectionChange,
   presetCatalog,
+  selectedPresetName,
   characterCatalogLoader = loadGarupaPinnedCharacterCatalog,
 }: GarupaSourcePanelProps) {
   const { locale, t } = useI18n()
@@ -169,6 +174,9 @@ export function GarupaSourcePanel({
   }
 
   const loadCharacterCatalog = async () => {
+    if (selectedPresetName !== null) {
+      return
+    }
     catalogRequestRef.current?.abort()
     const request = new AbortController()
     catalogRequestRef.current = request
@@ -246,7 +254,16 @@ export function GarupaSourcePanel({
 
   const selectModel = (bundleName: string) => {
     setSelectedBundleName(bundleName)
-    controller.selectPinned(bundleName)
+    const selectedEntry = selectedCharacterGroup?.entries.find(
+      (entry) => entry.bundleName === bundleName,
+    )
+    const characterName = selectedEntry
+      ? localizeGarupaCharacterName(selectedEntry, locale)
+      : null
+    controller.selectPinned(
+      bundleName,
+      characterName ? `${bundleName} - ${characterName}` : bundleName,
+    )
     onLoad()
   }
 
@@ -261,32 +278,15 @@ export function GarupaSourcePanel({
 
   return (
     <aside aria-label={t('garupa.modelImport')} className="control-panel">
-      <section className="panel-section preset-selection-section">
-        <div className="step-heading">
-          <span>00</span>
-          <div>
-            <h2>{t('builder.preset')}</h2>
-            <p>{t('garupa.presetDescription')}</p>
-          </div>
-        </div>
-        <label className="codex-pet-preset-selector resource-preset-selector">
-          <span>{t('builder.preset')}</span>
-          <select
-            data-testid="garupa-resource-preset-selector"
-            onChange={(event) =>
-              onPresetSelectionChange(event.target.value || null)
-            }
-            value={presetCatalog.activePresetName ?? ''}
-          >
-            <option value="">{t('builder.newSession')}</option>
-            {Object.keys(presetCatalog.presets).map((presetName) => (
-              <option key={presetName} value={presetName}>
-                {presetName}
-              </option>
-            ))}
-          </select>
-        </label>
-      </section>
+      <CodexPetPresetLoader
+        busy={catalogPhase === 'loading' || state.phase === 'loading'}
+        catalog={presetCatalog}
+        description={t('garupa.presetDescription')}
+        onLoad={onPresetLoad}
+        onSelectionChange={onPresetSelectionChange}
+        selectedPresetName={selectedPresetName}
+        selectorTestId="garupa-resource-preset-selector"
+      />
 
       <section className="panel-section garupa-live-source-section">
         <div className="step-heading">
@@ -299,7 +299,11 @@ export function GarupaSourcePanel({
         <div className="remote-actions garupa-catalog-actions">
           <button
             className="primary-action primary-action--compact"
-            disabled={catalogPhase === 'loading' || state.phase === 'loading'}
+            disabled={
+              selectedPresetName !== null ||
+              catalogPhase === 'loading' ||
+              state.phase === 'loading'
+            }
             onClick={() => void loadCharacterCatalog()}
             type="button"
           >

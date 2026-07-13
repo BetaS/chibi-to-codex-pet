@@ -2,6 +2,7 @@ import type { CodexPetAnimationMappings } from '../../codex-pet/animationMapping
 import type { CodexPetStateId } from '../../codex-pet/contract'
 import type { LiveSDAtlasBundle } from '../model'
 import type { LiveSDFramingOffset } from '../rendering/framingOffset'
+import type { LiveSDLookRigFallback } from '../rendering/lookRigFallback'
 
 export type LiveSDFrameSamplingPhase =
   | 'preparing'
@@ -31,6 +32,8 @@ export interface LiveSDFrameSamplingInput {
   readonly framingOffset?: LiveSDFramingOffset
   /** Relative to the calibrated 2px × 1.5px Codex Pet look radius. */
   readonly lookMovementScale?: number
+  /** Render look cells without eye offsets when this source has no usable rig. */
+  readonly lookRigFallback?: LiveSDLookRigFallback
   readonly skeletonData: ArrayBuffer
   readonly mappings: CodexPetAnimationMappings
   readonly signal?: AbortSignal

@@ -28,8 +28,8 @@ describe('Garupa pinned provider manifest', () => {
             'bbbfa18d864c80b6d4464b3ec0f15cafad1a327e1bf265db474b80274567bea9',
         },
       },
-      licenseStatus: 'not-declared',
     })
+    expect(GARUPA_PINNED_PROVIDER_MANIFEST).not.toHaveProperty('licenseStatus')
     expect(Object.isFrozen(GARUPA_PINNED_PROVIDER_MANIFEST)).toBe(true)
     expect(Object.isFrozen(GARUPA_PINNED_PROVIDER_MANIFEST.delivery)).toBe(true)
     expect(Object.isFrozen(GARUPA_PINNED_PROVIDER_MANIFEST.debugFixture.files)).toBe(true)

@@ -45,6 +45,7 @@ const PET_KEYS = [
   'lookMovementScale',
 ] as const
 const PRSK_PROVIDER_KEYS = ['characterId', 'provider'] as const
+const STRR_PROVIDER_KEYS = ['characterId', 'editionId', 'provider'] as const
 const RECIPE_KEYS = [
   'globalMirrorX',
   'kind',
@@ -55,7 +56,10 @@ const RECIPE_KEYS = [
   'source',
 ] as const
 
-export type CodexPetRecipeProvider = 'custom' | 'prsk-chibi-viewer'
+export type CodexPetRecipeProvider =
+  | 'custom'
+  | 'prsk-chibi-viewer'
+  | 'strr-res-pak'
 
 export interface CodexPetRecipeCustomSource {
   readonly provider: 'custom'
@@ -68,9 +72,16 @@ export interface CodexPetRecipePrskChibiViewerSource {
   readonly characterId: string
 }
 
+export interface CodexPetRecipeStrrResPakSource {
+  readonly provider: 'strr-res-pak'
+  readonly characterId: string
+  readonly editionId: string
+}
+
 export type CodexPetRecipeSource =
   | CodexPetRecipeCustomSource
   | CodexPetRecipePrskChibiViewerSource
+  | CodexPetRecipeStrrResPakSource
 
 export interface CodexPetRecipePet {
   readonly displayName: string
@@ -238,12 +249,12 @@ function parseLookMovementScale(value: unknown): number {
   return Math.round(value * 100) / 100
 }
 
-function parseCharacterId(value: unknown): string {
-  const characterId = parseTrimmedString(value, 'source.characterId', 128)
-  if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(characterId)) {
-    recipeError('source.characterId는 안전한 원격 캐릭터 ID여야 합니다.')
+function parseSourceId(value: unknown, field: 'characterId' | 'editionId'): string {
+  const sourceId = parseTrimmedString(value, `source.${field}`, 128)
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(sourceId)) {
+    recipeError(`source.${field}는 안전한 원격 ID여야 합니다.`)
   }
-  return characterId
+  return sourceId
 }
 
 export function parseCodexPetRecipeSource(
@@ -256,7 +267,7 @@ export function parseCodexPetRecipeSource(
     assertKnownKeys(source, PRSK_PROVIDER_KEYS, 'source')
     return {
       provider,
-      characterId: parseCharacterId(source.characterId),
+      characterId: parseSourceId(source.characterId, 'characterId'),
     }
   }
   if (provider === 'custom') {
@@ -264,10 +275,28 @@ export function parseCodexPetRecipeSource(
     return {
       provider,
       assetBaseUrl: parseTrimmedString(source.assetBaseUrl, 'source.assetBaseUrl', 2048),
-      characterId: parseCharacterId(source.characterId),
+      characterId: parseSourceId(source.characterId, 'characterId'),
     }
   }
-  recipeError('source.provider는 custom 또는 prsk-chibi-viewer여야 합니다.')
+  if (provider === 'strr-res-pak') {
+    assertKnownKeys(source, STRR_PROVIDER_KEYS, 'source')
+    const characterId = parseSourceId(source.characterId, 'characterId')
+    const editionId = parseSourceId(source.editionId, 'editionId')
+    if (!/^\d{1,8}$/u.test(characterId) || !/^\d{1,16}$/u.test(editionId)) {
+      recipeError('STRR source ID는 숫자 식별자여야 합니다.')
+    }
+    if (!editionId.startsWith(characterId)) {
+      recipeError('STRR edition ID는 character ID로 시작해야 합니다.')
+    }
+    return {
+      provider,
+      characterId,
+      editionId,
+    }
+  }
+  recipeError(
+    'source.provider는 custom, prsk-chibi-viewer 또는 strr-res-pak이어야 합니다.',
+  )
 }
 
 function parsePet(value: unknown): CodexPetRecipePet {

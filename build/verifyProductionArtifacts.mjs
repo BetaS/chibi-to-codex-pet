@@ -15,6 +15,8 @@ const requiredFiles = [
   'manifests/garupa/bangdream-live2d.v1.json',
   'client/manifests/garupa/bangdream-live2d.v1.json',
 ]
+const strrMirrorCommit = '866b72570450d6e38d0d441d387d0a230d2cb70e'
+const strrMirrorOrigin = 'https://raw.githubusercontent.com/clyerick/res-pak/'
 
 for (const relativePath of requiredFiles) {
   await access(resolve(distRoot, relativePath))
@@ -83,7 +85,7 @@ for (const path of spine40NoticePaths) {
   }
 }
 const approvedGarupaManifestSha256 =
-  '4db947430d85efc5d854945dda4d7c8ba5c5c571d4b71deaba49660d84f885fe'
+  '94e4a5f9d546e3a3b503441dbbf7d1f35ad88bc087eab625893cb45ab5b6954c'
 const manifestOutputPaths = [
   'manifests/garupa/bangdream-live2d.v1.json',
   'client/manifests/garupa/bangdream-live2d.v1.json',
@@ -115,7 +117,6 @@ if (
   garupaProviderManifest.repository?.sourceRevision !== approvedGarupaRevision ||
   garupaProviderManifest.delivery?.baseUrl !== approvedGarupaDeliveryBase ||
   garupaProviderManifest.delivery?.requestPolicy?.range !== 'forbidden' ||
-  garupaProviderManifest.licenseStatus !== 'not-declared' ||
   garupaProviderManifest.catalogs?.assetIndex?.sha256 !==
     'bbbfa18d864c80b6d4464b3ec0f15cafad1a327e1bf265db474b80274567bea9'
 ) {
@@ -275,12 +276,21 @@ const forbiddenEmbeddedValues = [
   {
     label: 'unapproved Garupa asset endpoint',
     pattern:
-      /https?:\/\/(?:bestdori\.com|(?:www\.)?haneoka\.org|raw\.githubusercontent\.com)\//,
+      /https?:\/\/(?:bestdori\.com|(?:www\.)?haneoka\.org)\//,
+  },
+  {
+    label: 'unapproved raw GitHub asset endpoint',
+    pattern:
+      /https?:\/\/raw\.githubusercontent\.com\/(?!clyerick\/res-pak\/866b72570450d6e38d0d441d387d0a230d2cb70e\/strr(?:\/|['"`]))/,
   },
   {
     label: 'mutable bangdream-live2d delivery URL',
     pattern:
       /https:\/\/cdn\.jsdelivr\.net\/gh\/panxuc\/bangdream-live2d@(?!15b3e023cfdc576212f8b3a6b001c9f26e755f23(?:\/|['"`]))(?!\$\{)/,
+  },
+  {
+    label: 'mutable STRR mirror branch reference',
+    pattern: /raw\.githubusercontent\.com\/clyerick\/res-pak\/refs\/heads\//,
   },
 ]
 
@@ -290,13 +300,29 @@ for (const { label, pattern } of forbiddenEmbeddedValues) {
   }
 }
 
+if (
+  !bundledText.includes(strrMirrorOrigin) ||
+  !bundledText.includes(strrMirrorCommit)
+) {
+  throw new Error('Production build is missing the commit-pinned STRR mirror.')
+}
+
 const localeStorageKey = 'chibi-to-codex-pet.locale.v1'
 if (!bundledText.includes(localeStorageKey)) {
   throw new Error('Production build is missing the versioned locale storage key.')
 }
-const petPresetStorageKey = 'chibi-to-codex-pet.pet-presets.v1'
-if (!bundledText.includes(petPresetStorageKey)) {
-  throw new Error('Production build is missing the versioned Pet preset storage key.')
+const petPresetStorageKeys = [
+  'chibi-to-codex-pet.pet-presets.prsk.v1',
+  'chibi-to-codex-pet.pet-presets.strr.v1',
+  'chibi-to-codex-pet.pet-presets.garupa.v1',
+  'chibi-to-codex-pet.pet-presets.v1',
+]
+for (const petPresetStorageKey of petPresetStorageKeys) {
+  if (!bundledText.includes(petPresetStorageKey)) {
+    throw new Error(
+      `Production build is missing Pet preset storage key: ${petPresetStorageKey}`,
+    )
+  }
 }
 
 for (const persistenceApi of ['sessionStorage', 'indexedDB']) {
@@ -363,5 +389,5 @@ for (const path of productionSourceFiles) {
 }
 
 console.log(
-  'Verified production runtime notices, approved lazy Spine 4.0 JS inclusion, Garupa provider pin, locale/Pet-preset-only storage, and exclusion of model assets, debug fixtures, generated catalogs, fixed option lists, and persisted user URLs.',
+  'Verified production runtime notices, approved lazy Spine 4.0 JS inclusion, Garupa provider pin, commit-pinned STRR mirror, locale/Pet-preset-only storage, and exclusion of model assets, debug fixtures, generated catalogs, fixed option lists, and persisted user URLs.',
 )

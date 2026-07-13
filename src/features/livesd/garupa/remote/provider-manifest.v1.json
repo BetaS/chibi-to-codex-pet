@@ -44,7 +44,6 @@
   "supportedRegion": "jp",
   "regionSemantics": "jp-preferred-union",
   "expectedRuntimeProfile": "spine-4.0",
-  "licenseStatus": "not-declared",
   "upstream": "Bestdori",
   "approvedAt": "2026-07-11T00:00:00Z",
   "debugFixture": {

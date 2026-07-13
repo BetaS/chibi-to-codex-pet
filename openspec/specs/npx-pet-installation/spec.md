@@ -18,8 +18,22 @@
 - **WHEN** 사용자가 `install`, `install <pet-id>` 또는 `install --recipe`만 실행한다
 - **THEN** CLI는 `CLI_USAGE_INVALID`와 exit `2`를 반환하고 filesystem을 변경하지 않는다
 
+### Requirement: web CLI 바로가기 복사
+
+Web builder는 recipe를 만들 수 있는 remote source의 package validation이 성공하면 정확한 `npx -y chibi-to-codex-pet install --recipe <recipe>` 명령을 read-only text로 표시하고(MUST), 그 명령 바로 아래에 locale별 `CLI 바로가기 복사` action을 제공해야 한다(MUST). Action은 표시된 명령 전체를 clipboard에 그대로 기록하고 성공을 polite live status로 알려야 한다(MUST). Clipboard write가 실패하거나 API를 사용할 수 없으면 명령 text와 package download를 유지하고 locale별 수동 복사 안내를 표시해야 한다(MUST). Recipe source가 없는 build에는 실행 불가능한 CLI 명령이나 복사 action을 만들어서는 안 된다(MUST NOT).
+
+#### Scenario: CLI 바로가기 복사 성공
+- **WHEN** 검증된 remote-source build 결과에서 사용자가 `CLI 바로가기 복사`를 실행한다
+- **THEN** clipboard에는 화면에 표시된 npx 명령과 byte-for-byte 같은 text가 한 번 기록되어야 한다
+- **AND** UI는 복사 성공을 현재 locale로 알려야 한다
+
+#### Scenario: Clipboard 실패
+- **WHEN** clipboard write가 거부되거나 지원되지 않는다
+- **THEN** read-only npx 명령과 ZIP download는 유지되어야 한다
+- **AND** UI는 명령을 직접 복사하라는 현재 locale의 안내를 표시해야 한다
+
 ### Requirement: strict Codex Pet recipe schema
-Recipe는 `schemaVersion: 1`, `kind: "livesd-recipe"`, `renderer: "livesd36-codex-pet@1"`, remote `source`, `pet` metadata, framing과 look 설정, PRSK 전체 수평 반전 설정, 그리고 모든 표준 Codex Pet 상태의 animation mapping을 포함해야 한다(MUST). Top level, source, pet와 각 mapping은 정의된 field 외의 key를 거부해야 하며(MUST), `package`, `packageBase64`, `spritesheet`, `spritesheetBase64`, `zip`, `zipBase64`와 local path 또는 binary payload를 허용하지 않아야 한다(MUST). JavaScript UTF-16 `length` 기준 trim된 `displayName`은 1–80, `description`은 0–280, 각 animation 이름은 1–128, character ID는 안전한 1–128 단일 segment, custom asset base URL 문자열은 최대 2048여야 한다(MUST).
+Recipe는 `schemaVersion: 1`, `kind: "livesd-recipe"`, `renderer: "livesd36-codex-pet@1"`, remote `source`, `pet` metadata, framing과 look 설정, 전체 수평 반전 설정, 그리고 모든 표준 Codex Pet 상태의 animation mapping을 포함해야 한다(MUST). Top level, source, pet와 각 mapping은 정의된 field 외의 key를 거부해야 하며(MUST), `package`, `packageBase64`, `spritesheet`, `spritesheetBase64`, `zip`, `zipBase64`와 local path 또는 binary payload를 허용하지 않아야 한다(MUST). JavaScript UTF-16 `length` 기준 trim된 `displayName`은 1–80, `description`은 0–280, 각 animation 이름은 1–128, character ID는 안전한 1–128 단일 segment, custom asset base URL 문자열은 최대 2048여야 한다(MUST). STRR source는 `provider: "strr-res-pak"`, 1–8자리 numeric `characterId`와 그 character ID로 시작하는 1–16자리 numeric `editionId`만 허용해야 한다(MUST).
 
 Version 1 parser는 누락된 `globalMirrorX`와 각 mapping의 `mirrorX`를 `false`, `framingScale`과 `lookMovementScale`을 `1.00`, X/Y offset을 각각 `0`으로 정규화해야 한다(MUST). Scale 값은 범위를 검사한 뒤 소수점 둘째 자리까지 반올림해야 하며(MUST), 새로 생성하는 recipe는 모든 canonical boolean과 framing·look 값을 명시해야 한다(MUST).
 
@@ -31,6 +45,15 @@ Version 1 parser는 누락된 `globalMirrorX`와 각 mapping의 `mirrorX`를 `fa
 #### Scenario: 유효한 custom provider recipe
 - **WHEN** recipe source가 `provider: "custom"`, canonical HTTPS `assetBaseUrl`, safe `characterId`와 유효한 framing 값을 가진다
 - **THEN** CLI는 해당 asset base의 `catalog.json`과 모델 리소스만 요청 대상으로 사용한다
+
+#### Scenario: 유효한 STRR 고정 mirror recipe
+- **WHEN** recipe source가 `provider: "strr-res-pak"`, 유효한 numeric `characterId`와 그 캐릭터에 속한 numeric `editionId`를 가진다
+- **THEN** CLI renderer는 web integration과 같은 exact-commit STRR catalog를 읽고 해당 캐릭터 skeleton과 에디션 atlas·PNG만 요청해야 한다
+- **AND** 전체·상태별 반전과 framing을 웹 exporter와 동일하게 적용하고 유효한 eye rig가 없으면 정적 look fallback으로 73-frame package를 생성해야 한다
+
+#### Scenario: 잘못된 STRR source 관계
+- **WHEN** STRR recipe의 ID가 숫자가 아니거나 `editionId`가 `characterId`로 시작하지 않는다
+- **THEN** CLI는 remote request 전에 `RECIPE_INVALID`와 exit `2`로 거부해야 한다
 
 #### Scenario: Optional framing 기본값
 - **WHEN** 유효한 schema version 1 recipe에 전체·상태별 수평 반전, scale 또는 X/Y offset key가 없다

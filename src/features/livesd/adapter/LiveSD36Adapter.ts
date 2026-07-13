@@ -211,6 +211,7 @@ export class LiveSD36Adapter implements LiveSD36AdapterContract {
         compatibility: header.compatibility,
         gl,
         images: [...imageByPath.values()],
+        lookRigFallback: input.lookRigFallback,
         matrix,
         renderer,
         runtime,

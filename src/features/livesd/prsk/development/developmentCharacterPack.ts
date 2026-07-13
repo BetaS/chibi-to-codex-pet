@@ -96,7 +96,7 @@ export async function loadDevelopmentCharacterPack(
   }
 
   return {
-    sourceName: `${DEVELOPMENT_CHARACTER_NAME} (기본 링크)`,
+    sourceName: `${DEVELOPMENT_CHARACTER_NAME} (기본 캐릭터)`,
     atlasPath: 'sekai_atlas.atlas',
     atlasText,
     atlasPages,

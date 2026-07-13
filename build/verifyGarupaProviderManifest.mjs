@@ -21,9 +21,9 @@ const repositoryUrl = 'https://github.com/panxuc/bangdream-live2d'
 const deliveryBase =
   `https://cdn.jsdelivr.net/gh/panxuc/bangdream-live2d@${revision}`
 const approvedManifestSha256 =
-  '4db947430d85efc5d854945dda4d7c8ba5c5c571d4b71deaba49660d84f885fe'
+  '94e4a5f9d546e3a3b503441dbbf7d1f35ad88bc087eab625893cb45ab5b6954c'
 const approvedProvenanceSha256 =
-  '5779e754966aa4631e515173ed2be03ec09f7fac941e2e13914f292ee3accaf6'
+  '9c9b011c42d2099acc91b48a02f6cdfb3cb616e603f778d6809023bb88961d0e'
 const sha256Pattern = /^[0-9a-f]{64}$/
 const relativePathPattern =
   /^(?!\/)(?!.*(?:^|\/)\.\.?(?:\/|$))(?!.*\\)[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*$/
@@ -68,7 +68,6 @@ assert(
   'Garupa delivery origin mismatch.',
 )
 assert(manifest.delivery?.requestPolicy?.range === 'forbidden', 'Range must be forbidden.')
-assert(manifest.licenseStatus === 'not-declared', 'Garupa data license state changed.')
 assert(provenance.sourceRevision === revision, 'Garupa provenance revision mismatch.')
 assert(
   provenance.inventory?.files === 2940 &&
@@ -158,8 +157,10 @@ const forbiddenRepositoryFiles = repositoryFiles.filter((path) => {
   return (
     lower.startsWith('assets/garupa/') ||
     lower.startsWith('assets/sdchara/') ||
+    /^assets\/strr(?:[-./]|$)/u.test(lower) ||
     lower.startsWith('public/assets/garupa/') ||
     lower.startsWith('public/assets/sdchara/') ||
+    /^public\/assets\/strr(?:[-./]|$)/u.test(lower) ||
     /(?:\.skel|\.atlas(?:\.txt)?|\.png|\.zip|\.asset|\.bundle|\.unity3d)$/.test(
       lower,
     )
@@ -302,6 +303,13 @@ async function listIgnoredAssetFiles(directory, root = directory) {
 
 for (const asset of await listIgnoredAssetFiles(resolve(repositoryRoot, 'assets'))) {
   const lowerPath = asset.path.toLowerCase()
+  const isStrrOfflineBackupPath = /^strr(?:[-./]|$)/u.test(lowerPath)
+  if (isStrrOfflineBackupPath) {
+    if (asset.absolutePath === null) {
+      leakedRepositoryFiles.push(`assets/${asset.path}`)
+    }
+    continue
+  }
   const isApprovedPrskFixturePath =
     /^prsk\/[A-Za-z0-9_][A-Za-z0-9._-]*\/sekai_atlas\.(?:atlas|png)$/u.test(
       asset.path,

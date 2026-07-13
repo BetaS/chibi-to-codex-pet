@@ -36,6 +36,7 @@ import {
 } from '../rendering/framingOffset'
 import { prepareLiveSD2DWebGLState } from '../rendering/prepareLiveSD2DWebGLState'
 import type { Spine36Runtime } from '../runtime/runtimeLoader'
+import type { LiveSDLookRigFallback } from '../rendering/lookRigFallback'
 import {
   calculateLiveSDLookWorldDeltaFromTarget,
   convertLiveSDWorldDeltaToLocal,
@@ -71,6 +72,7 @@ export interface WebGLLiveSDPreviewSessionOptions {
   readonly compatibility: LiveSDSkeletonCompatibility
   readonly gl: WebGLRenderingContext
   readonly images: readonly LoadedAtlasImage[]
+  readonly lookRigFallback?: LiveSDLookRigFallback
   readonly matrix: spine.webgl.Matrix4
   readonly renderer: spine.webgl.SkeletonRenderer
   readonly runtime: Spine36Runtime
@@ -171,6 +173,7 @@ export class WebGLLiveSDPreviewSession implements LiveSDPreviewSession {
   readonly #canvas: HTMLCanvasElement
   readonly #gl: WebGLRenderingContext
   readonly #images: readonly LoadedAtlasImage[]
+  readonly #lookRigFallback: LiveSDLookRigFallback | undefined
   readonly #matrix: spine.webgl.Matrix4
   readonly #renderer: spine.webgl.SkeletonRenderer
   readonly #runtime: Spine36Runtime
@@ -214,6 +217,7 @@ export class WebGLLiveSDPreviewSession implements LiveSDPreviewSession {
     this.#canvas = options.canvas
     this.#gl = options.gl
     this.#images = options.images
+    this.#lookRigFallback = options.lookRigFallback
     this.#matrix = options.matrix
     this.#renderer = options.renderer
     this.#runtime = options.runtime
@@ -462,7 +466,11 @@ export class WebGLLiveSDPreviewSession implements LiveSDPreviewSession {
     const nextTarget = target
       ? normalizeLiveSDLookTarget(target.x, target.y)
       : null
-    if (nextTarget && !this.#findLookBone()) {
+    if (
+      nextTarget &&
+      !this.#findLookBone() &&
+      this.#lookRigFallback !== 'static'
+    ) {
       throw new LiveSDPreviewError(
         'LOOK_RIG_MISSING',
         '시선을 미리보기할 eye_scale bone을 찾을 수 없습니다.',
@@ -615,6 +623,9 @@ export class WebGLLiveSDPreviewSession implements LiveSDPreviewSession {
 
     const eyeBone = this.#findLookBone()
     if (!eyeBone) {
+      if (this.#lookRigFallback === 'static') {
+        return
+      }
       throw new RangeError('LiveSD eye_scale bone must have a parent transform.')
     }
     const lookTarget = this.#mirrorX
@@ -626,15 +637,23 @@ export class WebGLLiveSDPreviewSession implements LiveSDPreviewSession {
       LIVE_SD_LOOK_HORIZONTAL_RADIUS_PX * this.#lookMovementScale,
       LIVE_SD_LOOK_VERTICAL_RADIUS_PX * this.#lookMovementScale,
     )
-    const localDelta = convertLiveSDWorldDeltaToLocal(
-      {
-        a: eyeBone.parent.a,
-        b: eyeBone.parent.b,
-        c: eyeBone.parent.c,
-        d: eyeBone.parent.d,
-      },
-      worldDelta,
-    )
+    let localDelta: LiveSDLookDelta
+    try {
+      localDelta = convertLiveSDWorldDeltaToLocal(
+        {
+          a: eyeBone.parent.a,
+          b: eyeBone.parent.b,
+          c: eyeBone.parent.c,
+          d: eyeBone.parent.d,
+        },
+        worldDelta,
+      )
+    } catch (error) {
+      if (this.#lookRigFallback === 'static' && error instanceof RangeError) {
+        return
+      }
+      throw error
+    }
     eyeBone.x += localDelta.x
     eyeBone.y += localDelta.y
     this.#lookOffsetBone = eyeBone

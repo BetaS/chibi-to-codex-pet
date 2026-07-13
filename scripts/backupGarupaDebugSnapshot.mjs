@@ -32,7 +32,7 @@ const provenancePath = resolve(
 const approvedRevision = '15b3e023cfdc576212f8b3a6b001c9f26e755f23'
 const approvedRepositoryUrl = 'https://github.com/panxuc/bangdream-live2d'
 const approvedManifestSha256 =
-  '4db947430d85efc5d854945dda4d7c8ba5c5c571d4b71deaba49660d84f885fe'
+  '94e4a5f9d546e3a3b503441dbbf7d1f35ad88bc087eab625893cb45ab5b6954c'
 const manifestBytes = await readFile(manifestPath)
 const manifest = JSON.parse(manifestBytes.toString('utf8'))
 const provenance = JSON.parse(await readFile(provenancePath, 'utf8'))
@@ -660,7 +660,6 @@ try {
       '/data/costumes.all.5.json',
     ],
     upstream: manifest.upstream,
-    licenseStatus: manifest.licenseStatus,
     inventory: {
       files: inventory.entries.length,
       bytes: inventory.totalBytes,

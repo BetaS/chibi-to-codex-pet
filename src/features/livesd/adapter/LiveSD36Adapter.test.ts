@@ -22,6 +22,7 @@ import type { AnimationFrameScheduler } from './WebGLLiveSDPreviewSession'
 
 interface MockRuntimeOptions {
   readonly atlasError?: Error
+  readonly eyeBoneMissing?: boolean
   readonly rendererError?: Error
 }
 
@@ -135,7 +136,7 @@ function createMockRuntime(
     setToSetupPose = vi.fn()
     updateWorldTransform = worldTransform
     findBone(name: string) {
-      return name === 'eye_scale' ? eyeBone : null
+      return name === 'eye_scale' && !options.eyeBoneMissing ? eyeBone : null
     }
 
     getBounds(
@@ -785,6 +786,57 @@ describe('LiveSD36Adapter', () => {
     session.setLookTarget(null, 1.5)
     expect(fixture.state.eyeBone.x).toBeCloseTo(10)
     expect(fixture.state.eyeBone.y).toBeCloseTo(5)
+    session.dispose()
+  })
+
+  it('기본 preview는 eye rig가 없으면 pointer look을 거부한다', async () => {
+    const fixture = createMockRuntime(['pose_default'], {
+      eyeBoneMissing: true,
+    })
+    const { canvas } = createCanvas()
+    const adapter = new LiveSD36Adapter({
+      runtimeLoader: { load: vi.fn(async () => fixture.runtime) },
+      imageLoader: vi.fn(async () => loadedImage()),
+      scheduler: createScheduler().scheduler,
+    })
+    const session = await adapter.createPreview({
+      canvas,
+      atlasBundle: createBundle(),
+      skeletonData: createSkeletonHeader('3.6.53'),
+    })
+
+    let caughtError: unknown
+    try {
+      session.setLookTarget({ x: 1, y: 0 })
+    } catch (error) {
+      caughtError = error
+    }
+    expect(caughtError).toMatchObject({ code: 'LOOK_RIG_MISSING' })
+    session.dispose()
+  })
+
+  it('static look fallback은 eye rig가 없어도 pointer preview를 유지한다', async () => {
+    const fixture = createMockRuntime(['pose_default'], {
+      eyeBoneMissing: true,
+    })
+    const { canvas } = createCanvas()
+    const adapter = new LiveSD36Adapter({
+      runtimeLoader: { load: vi.fn(async () => fixture.runtime) },
+      imageLoader: vi.fn(async () => loadedImage()),
+      scheduler: createScheduler().scheduler,
+    })
+    const session = await adapter.createPreview({
+      canvas,
+      atlasBundle: createBundle(),
+      lookRigFallback: 'static',
+      skeletonData: createSkeletonHeader('3.6.53'),
+    })
+    const drawsBeforeLook = fixture.state.rendererDraw.mock.calls.length
+
+    expect(() => session.setLookTarget({ x: 1, y: 0 })).not.toThrow()
+    expect(fixture.state.rendererDraw).toHaveBeenCalledTimes(drawsBeforeLook + 1)
+    expect(fixture.state.eyeBone.x).toBe(0)
+    expect(fixture.state.eyeBone.y).toBe(0)
     session.dispose()
   })
 

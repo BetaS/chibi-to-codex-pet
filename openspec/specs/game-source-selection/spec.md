@@ -18,7 +18,7 @@
 #### Scenario: 활성화된 게임 목록 조회
 - **WHEN** 앱이 게임 source registry를 조회한다
 - **THEN** 첫 항목은 `id: "prsk"`, `labelKey: "game.prsk"`, 상태 `available`과 PRSK integration을 가져야 한다
-- **AND** 두 번째 항목은 `id: "strr"`, `labelKey: "game.strr"`, 상태 `coming-soon`이고 integration이 없어야 한다
+- **AND** 두 번째 항목은 `id: "strr"`, `labelKey: "game.strr"`, 상태 `available`과 STRR integration을 가져야 한다
 - **AND** 세 번째 항목은 `id: "garupa"`, `labelKey: "game.garupa"`, 상태 `available`과 공개 `GarupaSourceIntegration`을 가져야 한다
 
 #### Scenario: 표시와 routing의 단일 정의
@@ -29,19 +29,19 @@
 ### Requirement: 상단 게임 선택 탭
 앱은 model source, preview와 Codex Pet builder보다 위에 게임 선택 tablist를 표시해야 한다(SHALL). 초기 선택은 `프로세카`여야 하며(MUST), 선택된 available 탭, 선택 가능한 available 탭과 준비중 탭의 상태를 시각적·programmatic 방식으로 구분해야 한다(MUST).
 
-#### Scenario: 초기 화면
+#### Scenario: 기본 초기 화면
 - **WHEN** 사용자가 앱에 처음 진입한다
 - **THEN** 상단 tablist에 `프로세카`, `레뷰 스타라이트`, `BanG Dream!`이 순서대로 표시되어야 한다
 - **AND** `프로세카`는 선택 상태여야 한다
-- **AND** `BanG Dream!`은 선택 가능한 상태이고 `레뷰 스타라이트`에만 `준비중` 상태가 표시되어야 한다
+- **AND** `레뷰 스타라이트`와 `BanG Dream!`도 선택 가능하고 어느 탭에도 `준비중` 상태가 표시되어서는 안 된다
 
-#### Scenario: 접근 가능한 탭 상태
+#### Scenario: 기본 설정의 접근 가능한 탭 상태
 - **WHEN** 보조 기술이 게임 tablist를 탐색한다
-- **THEN** 선택된 게임은 selected 상태로 노출되어야 한다
-- **AND** `BanG Dream!`은 disabled가 아닌 tab으로, `레뷰 스타라이트`는 disabled 또는 `aria-disabled`와 `준비중` 이름으로 노출되어야 한다
+- **THEN** 선택된 `프로세카`는 selected 상태로 노출되어야 한다
+- **AND** `레뷰 스타라이트`와 `BanG Dream!`은 모두 enabled tab으로 노출되어야 한다
 
 ### Requirement: 선택된 게임 integration으로 빌드
-시스템은 현재 선택된 available game entry의 integration을 통해 source 입력, resource loading, preview, 방향 설정과 Codex Pet build를 수행해야 한다(SHALL). `prsk` entry는 `src/features/livesd/prsk/`, `garupa` entry는 `src/features/livesd/garupa/` 공개 integration에 연결되어야 한다(MUST).
+시스템은 현재 선택된 available game entry의 integration을 통해 source 입력, resource loading, preview, 방향 설정과 Codex Pet build를 수행해야 한다(SHALL). `prsk` entry는 `src/features/livesd/prsk/`, `strr` entry는 `src/features/livesd/strr/`, `garupa` entry는 `src/features/livesd/garupa/` 공개 integration에 연결되어야 한다(MUST).
 
 #### Scenario: 프로세카 선택 상태의 local build
 - **WHEN** `프로세카`가 선택된 상태에서 사용자가 유효한 local PRSK source를 준비한다
@@ -57,18 +57,26 @@
 - **WHEN** 사용자가 `BanG Dream!`을 선택하고 기본 live resource pack의 캐릭터와 모델을 순서대로 선택한다
 - **THEN** 앱은 exact-commit provider에서 canonical Spine 4.0 source를 만들고 첫 visible frame 뒤에 preview를 ready로 표시해야 한다
 - **AND** 실제 animation 목록, paired-eye look와 Garupa frame sampler를 사용해 Codex Pet package build를 제공해야 한다
+- **AND** Pet 기본 이름은 현재 locale의 `모델 bundle 이름 - 캐릭터 이름` 형식이어야 하며 이름을 결정할 수 없는 model은 bundle 이름만 사용해야 한다
+- **AND** 새 Garupa source의 전체 캐릭터 수평 반전은 기본으로 비활성화되어야 하며 Garupa runtime 안에서 명시적으로 저장한 preset만 이 값을 덮어쓸 수 있다
 
 #### Scenario: Garupa local pack preview와 build
 - **WHEN** 사용자가 `BanG Dream!`에서 유효한 canonical ZIP을 선택하고 명시적으로 불러온다
 - **THEN** 앱은 외부 request 없이 local importer와 같은 Garupa preview·builder 계약을 사용해야 한다
 
-### Requirement: 준비중 게임의 비활성 탭 상태
-선택 가능한 탭은 실행 가능한 integration을 가진 `available` entry로 제한해야 한다(MUST). `coming-soon`인 `strr` 탭은 비활성 상태를 표시하고(MUST), activation event가 발생해도 현재 available 게임의 선택, source UI, request, preview session과 build 상태를 유지해야 한다(MUST).
+#### Scenario: STRR pinned source preview와 build
+- **WHEN** 사용자가 `레뷰 스타라이트`를 선택하고 기본 catalog의 캐릭터와 에디션을 순서대로 선택한다
+- **THEN** 앱은 STRR 전용 integration과 exact-commit provider로 Spine 3.6 source를 만들고 첫 visible frame 뒤에 preview를 ready로 표시해야 한다
+- **AND** STRR 전용 기본값과 static look fallback, 실제 animation 목록, 공통 builder·sampler를 사용해 Codex Pet package와 `strr-res-pak` recipe를 제공해야 한다
 
-#### Scenario: 레뷰 스타라이트 활성화 시도
-- **WHEN** 사용자가 pointer, keyboard 또는 programmatic UI event로 `레뷰 스타라이트(준비중)` 탭 활성화를 시도한다
-- **THEN** 선택된 game ID와 현재 available integration 상태가 유지되어야 한다
-- **AND** STRR resource request가 새로 시작되어서는 안 된다
+### Requirement: 게임 탭 전환과 비활성 상태
+선택 가능한 탭은 실행 가능한 integration을 가진 `available` entry로 제한해야 한다(MUST). available 게임으로 전환하면 기존 integration의 request와 preview를 정리한 뒤 새 integration을 mount해야 한다(MUST). 향후 `coming-soon` entry가 생기면 비활성 상태를 표시하고 activation event에도 현재 선택과 integration 상태를 유지해야 한다(MUST).
+
+#### Scenario: 레뷰 스타라이트 선택
+- **WHEN** 사용자가 `레뷰 스타라이트` 탭을 선택한다
+- **THEN** 선택된 game ID는 `strr`로 바뀌어야 한다
+- **AND** 기존 PRSK request와 preview session을 정리해야 한다
+- **AND** 사용자가 명시적으로 catalog 불러오기를 누르기 전에는 STRR resource request를 시작해서는 안 된다
 
 #### Scenario: BanG Dream! 선택
 - **WHEN** 사용자가 `BanG Dream!` 탭을 활성화한다

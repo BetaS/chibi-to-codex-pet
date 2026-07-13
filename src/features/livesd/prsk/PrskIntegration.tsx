@@ -68,6 +68,7 @@ import {
   SPINE_36_RUNTIME_NOTICES_URL,
 } from '../runtime/runtimeLoader'
 import { CodexPetBuilder } from '../../codex-pet/CodexPetBuilder'
+import { CodexPetPresetLoader } from '../../codex-pet/CodexPetPresetLoader'
 import { CodexPetStateShortcuts } from '../../codex-pet/CodexPetStateShortcuts'
 import {
   resolveCodexPetMirrorX,
@@ -76,11 +77,8 @@ import {
 import type { CodexPetStateId } from '../../codex-pet/contract'
 import { CODEX_PET_LOOK_MOVEMENT_SCALE_DEFAULT } from '../../codex-pet/lookMovementScale'
 import type { CodexPetRecipeSource } from '../../codex-pet/recipe'
-import {
-  readCodexPetSettingsPresetCatalog,
-  selectCodexPetSettingsPreset,
-  type CodexPetSettingsPresetCatalog,
-} from '../../codex-pet/settingsPresets'
+import type { CodexPetSettingsPresetSource } from '../../codex-pet/settingsPresets'
+import { useCodexPetPresetSession } from '../../codex-pet/useCodexPetPresetSession'
 import { toPrskPreviewUiNotice } from './previewError'
 
 const DEVELOPMENT_DEFAULTS_ENABLED =
@@ -107,12 +105,29 @@ interface PreviewViewModel {
   readonly version: string
 }
 
+type PrskRecipeSource = Exclude<
+  CodexPetRecipeSource,
+  { readonly provider: 'strr-res-pak' }
+>
+
+function isPrskRecipeSource(
+  source: CodexPetSettingsPresetSource | null,
+): source is PrskRecipeSource {
+  return source !== null && (
+    source.provider === 'custom' ||
+    source.provider === 'prsk-chibi-viewer'
+  )
+}
+
 function recipeSourceKey(source: CodexPetRecipeSource | null | undefined): string {
   if (!source) {
     return ''
   }
-  return source.provider === 'custom'
-    ? `${source.provider}:${source.assetBaseUrl}:${source.characterId}`
+  if (source.provider === 'custom') {
+    return `${source.provider}:${source.assetBaseUrl}:${source.characterId}`
+  }
+  return source.provider === 'strr-res-pak'
+    ? `${source.provider}:${source.characterId}:${source.editionId}`
     : `${source.provider}:${source.characterId}`
 }
 
@@ -166,10 +181,7 @@ export function PrskIntegration() {
 
   const [resourceSource, setResourceSource] =
     useState<PrskResourceSource>('provided')
-  const [presetCatalog, setPresetCatalog] =
-    useState<CodexPetSettingsPresetCatalog>(() =>
-      readCodexPetSettingsPresetCatalog(),
-    )
+  const presetSession = useCodexPetPresetSession('prsk')
   const [archiveFile, setArchiveFile] = useState<File | null>(null)
   const [skeletonFile, setSkeletonFile] = useState<File | null>(null)
   const [localBusy, setLocalBusy] = useState(false)
@@ -205,10 +217,15 @@ export function PrskIntegration() {
     messageKey: 'prsk.status.providedSelected',
   })
 
-  const activePreset = presetCatalog.activePresetName
-    ? presetCatalog.presets[presetCatalog.activePresetName]
+  const activePreset = presetSession.appliedCatalog.activePresetName
+    ? presetSession.appliedCatalog.presets[
+        presetSession.appliedCatalog.activePresetName
+      ]
     : undefined
-  const activePresetSource = activePreset?.source ?? null
+  const presetSource = activePreset?.source ?? null
+  const activePresetSource = isPrskRecipeSource(presetSource)
+    ? presetSource
+    : null
   const activePresetSourceKey = recipeSourceKey(activePresetSource)
   const activeSourceKey = recipeSourceKey(activeSource?.recipeSource)
 
@@ -542,7 +559,11 @@ export function PrskIntegration() {
   }
 
   const loadRemoteCatalog = async () => {
-    if (resourceSource === 'upload' || catalogPhase === 'loading') {
+    if (
+      presetSession.selectedPresetName !== null ||
+      resourceSource === 'upload' ||
+      catalogPhase === 'loading'
+    ) {
       return
     }
 
@@ -736,7 +757,7 @@ export function PrskIntegration() {
   }, [activateSession, remoteCatalog, resourceSource, toNotice])
 
   const loadPresetRemoteSource = useCallback(async (
-    recipeSource: CodexPetRecipeSource,
+    recipeSource: PrskRecipeSource,
   ) => {
     const canvas = canvasRef.current
     if (!canvas) {
@@ -908,21 +929,24 @@ export function PrskIntegration() {
     activePresetSourceKey,
     activeSourceKey,
     loadPresetRemoteSource,
+    presetSession.loadGeneration,
   ])
 
   const handlePresetSelectionChange = useCallback((
     presetName: string | null,
   ) => {
-    abortRemoteRequests()
-    catalogGenerationRef.current += 1
-    modelGenerationRef.current += 1
-    previewGenerationRef.current += 1
-    setCatalogPhase((current) =>
-      current === 'loading' ? (remoteCatalog ? 'ready' : 'idle') : current,
-    )
-    setRemoteModelBusy(false)
-    setPresetCatalog(selectCodexPetSettingsPreset(presetName))
-  }, [abortRemoteRequests, remoteCatalog])
+    if (presetName === null) {
+      abortRemoteRequests()
+      catalogGenerationRef.current += 1
+      modelGenerationRef.current += 1
+      previewGenerationRef.current += 1
+      setCatalogPhase((current) =>
+        current === 'loading' ? (remoteCatalog ? 'ready' : 'idle') : current,
+      )
+      setRemoteModelBusy(false)
+    }
+    presetSession.selectPreset(presetName)
+  }, [abortRemoteRequests, presetSession, remoteCatalog])
 
   const handleLocalPreview = () => {
     if (localBusy || resourceSource !== 'upload') {
@@ -1138,32 +1162,15 @@ export function PrskIntegration() {
     <>
       <div className="workspace-grid">
         <aside className="control-panel" aria-label={t('prsk.modelImport')}>
-          <section className="panel-section preset-selection-section">
-            <div className="step-heading">
-              <span>00</span>
-              <div>
-                <h2>{t('builder.preset')}</h2>
-                <p>{t('prsk.presetDescription')}</p>
-              </div>
-            </div>
-            <label className="codex-pet-preset-selector resource-preset-selector">
-              <span>{t('builder.preset')}</span>
-              <select
-                data-testid="resource-preset-selector"
-                onChange={(event) =>
-                  handlePresetSelectionChange(event.target.value || null)
-                }
-                value={presetCatalog.activePresetName ?? ''}
-              >
-                <option value="">{t('builder.newSession')}</option>
-                {Object.keys(presetCatalog.presets).map((presetName) => (
-                  <option key={presetName} value={presetName}>
-                    {presetName}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </section>
+          <CodexPetPresetLoader
+            busy={catalogPhase === 'loading' || remoteModelBusy || localBusy}
+            catalog={presetSession.catalog}
+            description={t('prsk.presetDescription')}
+            onLoad={presetSession.loadSelectedPreset}
+            onSelectionChange={handlePresetSelectionChange}
+            selectedPresetName={presetSession.selectedPresetName}
+            selectorTestId="resource-preset-selector"
+          />
 
           <section className="panel-section source-mode-section">
             <div className="step-heading">
@@ -1322,7 +1329,7 @@ export function PrskIntegration() {
                   </label>
                 ) : (
                   <div className="provided-resource-card">
-                    <strong>prsk-chibi-viewer manifest</strong>
+                    <strong>{t('prsk.sourceProvided')}</strong>
                     <p>{t('prsk.providedManifestDescription')}</p>
                   </div>
                 )}
@@ -1330,6 +1337,7 @@ export function PrskIntegration() {
                   <button
                     className="primary-action primary-action--compact"
                     disabled={
+                      presetSession.selectedPresetName !== null ||
                       catalogPhase === 'loading' ||
                       (resourceSource === 'custom' && !remoteBaseUrl.trim())
                     }
@@ -1417,7 +1425,7 @@ export function PrskIntegration() {
         <section className="preview-panel" aria-labelledby="preview-title">
           <div className="preview-toolbar">
             <div>
-              <p className="toolbar-label">WebGL preview</p>
+              <p className="toolbar-label">{t('game.prsk')}</p>
               <h2 id="preview-title">
                 {preview?.sourceName ?? t('prsk.characterPreview')}
               </h2>
@@ -1574,13 +1582,15 @@ export function PrskIntegration() {
           onFramingChange={applyBuilderFraming}
           onGlobalMirrorXChange={handleGlobalMirrorXChange}
           onMappingsChange={handleMappingsChange}
-          onPresetCatalogChange={setPresetCatalog}
+          onPresetCatalogChange={presetSession.updateCatalog}
           onPreviewAnimationChange={playStateAnimation}
           onPreviewLookMovementScaleChange={
             updatePreviewLookMovementScale
           }
           recipeSource={activeSource?.recipeSource ?? null}
-          presetCatalog={presetCatalog}
+          presetCatalog={presetSession.appliedCatalog}
+          presetLoadGeneration={presetSession.loadGeneration}
+          presetRuntime="prsk"
           source={activeSource}
         />
       </div>

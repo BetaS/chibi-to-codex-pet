@@ -53,7 +53,6 @@ export interface GarupaPinnedProviderManifest {
   readonly supportedRegion: 'jp'
   readonly regionSemantics: 'jp-preferred-union'
   readonly expectedRuntimeProfile: 'spine-4.0'
-  readonly licenseStatus: 'not-declared'
   readonly upstream: 'Bestdori'
   readonly approvedAt: string
   readonly debugFixture: {

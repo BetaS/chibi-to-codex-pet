@@ -10,7 +10,6 @@
   "sourceRegions": ["jp", "cn"],
   "supportedRegion": "jp",
   "regionSemantics": "jp-preferred-union",
-  "licenseStatus": "not-declared",
   "localBackupPolicy": "private-unserved-untracked",
   "inventory": {
     "files": 2940,

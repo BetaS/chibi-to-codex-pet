@@ -118,8 +118,10 @@ function renderPanel(
       <GarupaSourcePanel
         controller={controller}
         onLoad={() => void controller.load(canvas)}
+        onPresetLoad={vi.fn()}
         onPresetSelectionChange={vi.fn()}
         presetCatalog={readCodexPetSettingsPresetCatalog(null)}
+        selectedPresetName={null}
         {...catalogProps}
       />
     </I18nProvider>,
@@ -128,7 +130,7 @@ function renderPanel(
 
 async function loadCatalogAndSelectKasumi(user: ReturnType<typeof userEvent.setup>) {
   await user.click(
-    screen.getByRole('button', { name: '라이브 리소스 목록 불러오기' }),
+    screen.getByRole('button', { name: '캐릭터 목록 불러오기' }),
   )
   const character = screen.getByRole('combobox', { name: '캐릭터' })
   await waitFor(() => expect(character).toBeEnabled())
@@ -153,8 +155,14 @@ describe('Garupa source panel lifecycle', () => {
     renderPanel(controller)
 
     expect(screen.getByTestId('garupa-resource-preset-selector')).toBeVisible()
+    expect(screen.getByRole('button', {
+      name: '프리셋 불러오기',
+    })).toBeDisabled()
+    expect(screen.getByRole('button', {
+      name: '캐릭터 목록 불러오기',
+    })).toBeEnabled()
     expect(
-      screen.getByRole('heading', { name: '라이브 리소스 팩' }),
+      screen.getByRole('heading', { name: '캐릭터 선택' }),
     ).toBeVisible()
     expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument()
     expect(screen.queryByText(/github\.com\/panxuc/u)).not.toBeInTheDocument()
@@ -215,6 +223,9 @@ describe('Garupa source panel lifecycle', () => {
       ),
     )
     expect(materializePinned).toHaveBeenCalledTimes(1)
+    expect(controller.getState().active?.defaultDisplayName).toBe(
+      '00001 - 토야마 카스미',
+    )
     expect(screen.queryByRole('button', { name: '불러오기' })).not.toBeInTheDocument()
 
     await user.click(model)
@@ -225,6 +236,9 @@ describe('Garupa source panel lifecycle', () => {
       ),
     )
     expect(materializePinned).toHaveBeenCalledTimes(2)
+    expect(controller.getState().active?.defaultDisplayName).toBe(
+      '00001_2023 - 토야마 카스미',
+    )
     expect(firstPreview.dispose).toHaveBeenCalledOnce()
     expect(secondPreview.dispose).not.toHaveBeenCalled()
   })
@@ -258,7 +272,7 @@ describe('Garupa source panel lifecycle', () => {
     await user.click(screen.getByRole('option', { name: '00001_2023' }))
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent(
-      'Garupa Spine 모델을 안전하게 미리보기 또는 sampling하지 못했습니다.',
+      '캐릭터 미리보기를 만들지 못했습니다.',
     )
     expect(alert).not.toHaveTextContent('/Users/private')
     expect(alert).toHaveAttribute('data-code', 'GARUPA_PREVIEW_RENDER_FAILED')
@@ -267,7 +281,7 @@ describe('Garupa source panel lifecycle', () => {
 
     await user.click(screen.getByRole('button', { name: 'English' }))
     expect(screen.getByRole('alert')).toHaveTextContent(
-      'The Garupa Spine model could not be previewed or sampled safely.',
+      'The character preview could not be created.',
     )
   })
 

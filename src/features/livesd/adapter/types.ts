@@ -2,6 +2,7 @@ import type { CodexPetAnimationMappings } from '../../codex-pet/animationMapping
 import type { LiveSDAtlasBundle } from '../model'
 import type { LiveSDLookTarget } from '../rendering/lookTarget'
 import type { LiveSDFramingOffset } from '../rendering/framingOffset'
+import type { LiveSDLookRigFallback } from '../rendering/lookRigFallback'
 import type { LiveSDPreviewError } from './errors'
 
 export type LiveSDSkeletonCompatibility =
@@ -18,6 +19,7 @@ export interface LiveSDSkeletonHeader {
 export interface LiveSD36PreviewInput {
   readonly atlasBundle: LiveSDAtlasBundle
   readonly canvas: HTMLCanvasElement
+  readonly lookRigFallback?: LiveSDLookRigFallback
   readonly skeletonData: ArrayBuffer
 }
 

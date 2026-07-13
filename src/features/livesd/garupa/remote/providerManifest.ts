@@ -160,7 +160,6 @@ export function parseGarupaPinnedProviderManifest(
       'gameId',
       'id',
       'label',
-      'licenseStatus',
       'regionSemantics',
       'repository',
       'schemaVersion',
@@ -180,7 +179,6 @@ export function parseGarupaPinnedProviderManifest(
     typeof value.label !== 'string' ||
     value.label.length === 0 ||
     value.expectedRuntimeProfile !== 'spine-4.0' ||
-    value.licenseStatus !== 'not-declared' ||
     value.upstream !== 'Bestdori' ||
     value.supportedRegion !== 'jp' ||
     value.regionSemantics !== 'jp-preferred-union' ||

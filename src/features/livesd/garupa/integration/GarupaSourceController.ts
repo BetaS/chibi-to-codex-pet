@@ -15,11 +15,13 @@ export type GarupaSourceSelection =
       readonly file: File
     }
   | {
+      readonly defaultDisplayName?: string
       readonly kind: 'pinned'
       readonly sdAssetBundleName: string
     }
 
 export interface GarupaSourceSummary {
+  readonly defaultDisplayName?: string
   readonly generation: number
   readonly kind: GarupaSourceSelection['kind']
   readonly modelName: string
@@ -35,7 +37,11 @@ export interface GarupaSourceControllerState {
   readonly phase: 'error' | 'idle' | 'loading' | 'ready'
   readonly selection:
     | { readonly kind: 'local'; readonly name: string }
-    | { readonly kind: 'pinned'; readonly sdAssetBundleName: string }
+    | {
+        readonly defaultDisplayName?: string
+        readonly kind: 'pinned'
+        readonly sdAssetBundleName: string
+      }
     | null
 }
 
@@ -72,12 +78,15 @@ const IDLE_STATE: GarupaSourceControllerState = Object.freeze({
 
 function sourceSummary(
   source: GarupaCanonicalSource,
-  kind: GarupaSourceSelection['kind'],
+  selection: GarupaSourceSelection,
   generation: number,
 ): GarupaSourceSummary {
   return Object.freeze({
+    ...(selection.kind === 'pinned' && selection.defaultDisplayName
+      ? { defaultDisplayName: selection.defaultDisplayName }
+      : {}),
     generation,
-    kind,
+    kind: selection.kind,
     modelName: source.metadata.modelName,
     runtimeKey: source.metadata.runtimeKey,
     sdAssetBundleName: source.metadata.sdAssetBundleName,
@@ -131,10 +140,16 @@ export class GarupaSourceController {
 
   clearSelection(): void {
     this.#assertUsable()
+    if (this.#request) {
+      this.#request.abort()
+      this.#request = null
+      this.#generation += 1
+    }
     this.#selection = null
     this.#publish({
       ...this.#state,
       diagnostic: null,
+      generation: this.#generation,
       phase: this.#activeSource ? 'ready' : 'idle',
       selection: null,
     })
@@ -151,14 +166,22 @@ export class GarupaSourceController {
     })
   }
 
-  selectPinned(sdAssetBundleName: string): void {
+  selectPinned(
+    sdAssetBundleName: string,
+    defaultDisplayName?: string,
+  ): void {
     this.#assertUsable()
-    this.#selection = { kind: 'pinned', sdAssetBundleName }
+    const selection: GarupaSourceSelection = {
+      ...(defaultDisplayName ? { defaultDisplayName } : {}),
+      kind: 'pinned',
+      sdAssetBundleName,
+    }
+    this.#selection = selection
     this.#publish({
       ...this.#state,
       diagnostic: null,
       phase: this.#activeSource ? 'ready' : 'idle',
-      selection: { kind: 'pinned', sdAssetBundleName },
+      selection,
     })
   }
 
@@ -204,7 +227,7 @@ export class GarupaSourceController {
       nextPreview = null
       this.#publish({
         ...this.#state,
-        active: sourceSummary(nextSource, selection.kind, generation),
+        active: sourceSummary(nextSource, selection, generation),
         diagnostic: null,
         generation,
         phase: 'ready',

@@ -7,12 +7,16 @@ Provided 또는 custom PRSK provider에서 character catalog와 LiveSD model을 
 ## Requirements
 
 ### Requirement: 명시적 원격 소스 선택
-원격 catalog source는 `provided`와 `custom`이며 resource selector의 초기값은 `provided`여야 한다(MUST). 새 세션에서는 catalog request가 사용자의 `불러오기` 실행으로 시작되고(MUST), model request는 현재 catalog의 검증된 dropdown option commit으로 시작해야 한다(MUST). 저장 preset에 검증된 원격 provider와 character ID가 있으면 preset 복원 또는 선택이 같은 두 요청을 순서대로 자동 시작해야 한다(MUST). Source 없는 page 진입과 검색 interaction은 selected source의 idle 또는 현재 request state를 유지해야 한다(MUST).
+원격 catalog source는 `provided`와 `custom`이며 resource selector의 초기값은 `provided`여야 한다(MUST). 새 세션에서는 catalog request가 사용자의 character list `불러오기` 실행으로 시작되고(MUST), model request는 현재 catalog의 검증된 dropdown option commit으로 시작해야 한다(MUST). 저장 preset에 검증된 원격 provider와 character ID가 있으면 저장 option 선택이 아니라 별도 `프리셋 불러오기` 실행이 같은 두 요청을 순서대로 시작해야 한다(MUST). Source 없는 page 진입, 저장 preset option 선택과 검색 interaction은 selected source의 idle 또는 현재 request state를 유지해야 한다(MUST).
 
-#### Scenario: 저장 원격 preset 자동 요청
-- **WHEN** 사용자가 provided 또는 custom source와 character ID가 저장된 preset을 선택한다
+#### Scenario: 저장 원격 preset 명시적 요청
+- **WHEN** 사용자가 provided 또는 custom source와 character ID가 저장된 preset을 선택한 뒤 `프리셋 불러오기`를 실행한다
 - **THEN** 시스템은 저장 provider로 catalog를 요청한 뒤 저장 character ID로 model을 요청해야 한다
-- **AND** 별도의 `불러오기` 또는 character dropdown commit을 요구해서는 안 된다
+- **AND** 별도의 character list `불러오기` 또는 character dropdown commit을 요구해서는 안 된다
+
+#### Scenario: 저장 원격 preset 선택만 수행
+- **WHEN** 사용자가 저장 원격 preset option을 선택했지만 `프리셋 불러오기`를 실행하지 않았다
+- **THEN** catalog와 model request는 모두 0건이고 character list `불러오기`는 비활성이어야 한다
 
 #### Scenario: 초기 provided 화면
 - **WHEN** 사용자가 앱을 열고 원격 동작을 실행하지 않는다

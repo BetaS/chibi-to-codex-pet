@@ -1,0 +1,9 @@
+.strr-selector-stack .searchable-combobox {
+  margin-top: 0.9rem;
+}
+
+[data-testid='strr-render-evidence'] {
+  color: #9fe8c6 !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.66rem !important;
+}

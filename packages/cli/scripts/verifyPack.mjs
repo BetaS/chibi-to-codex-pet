@@ -103,7 +103,7 @@ const garupaManifestSha256 = createHash('sha256')
 if (
   garupaManifestBytes.byteLength > 8192 ||
   garupaManifestSha256 !==
-    '4db947430d85efc5d854945dda4d7c8ba5c5c571d4b71deaba49660d84f885fe'
+    '94e4a5f9d546e3a3b503441dbbf7d1f35ad88bc087eab625893cb45ab5b6954c'
 ) {
   throw new Error('CLI renderer contains an unapproved Garupa provider manifest.')
 }

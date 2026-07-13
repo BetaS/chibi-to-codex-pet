@@ -3,6 +3,7 @@ import type { ComponentType } from 'react'
 import type { MessageKey } from '../i18n'
 import { GarupaSourceIntegration } from './livesd/garupa'
 import { PrskIntegration } from './livesd/prsk'
+import { StrrIntegrationRoute } from './livesd/strr/StrrIntegrationRoute'
 
 export type GameSourceId = 'prsk' | 'strr' | 'garupa'
 
@@ -24,21 +25,40 @@ export type GameSourceDefinition =
   | AvailableGameSourceDefinition
   | ComingSoonGameSourceDefinition
 
-export const GAME_SOURCES = Object.freeze([
-  {
-    id: 'prsk',
-    labelKey: 'game.prsk',
-    status: 'available',
-    integration: PrskIntegration,
-  },
-  { id: 'strr', labelKey: 'game.strr', status: 'coming-soon' },
-  {
-    id: 'garupa',
-    labelKey: 'game.garupa',
-    status: 'available',
-    integration: GarupaSourceIntegration,
-  },
-] as const satisfies readonly GameSourceDefinition[])
+export function createGameSources(
+  strrIntegration: ComponentType | null = StrrIntegrationRoute,
+  garupaIntegration: ComponentType | null = GarupaSourceIntegration,
+): readonly GameSourceDefinition[] {
+  const strr: GameSourceDefinition = strrIntegration
+    ? {
+        id: 'strr',
+        labelKey: 'game.strr',
+        status: 'available',
+        integration: strrIntegration,
+      }
+    : { id: 'strr', labelKey: 'game.strr', status: 'coming-soon' }
+  const garupa: GameSourceDefinition = garupaIntegration
+    ? {
+        id: 'garupa',
+        labelKey: 'game.garupa',
+        status: 'available',
+        integration: garupaIntegration,
+      }
+    : { id: 'garupa', labelKey: 'game.garupa', status: 'coming-soon' }
+
+  return Object.freeze([
+    {
+      id: 'prsk',
+      labelKey: 'game.prsk',
+      status: 'available',
+      integration: PrskIntegration,
+    },
+    strr,
+    garupa,
+  ] satisfies readonly GameSourceDefinition[])
+}
+
+export const GAME_SOURCES = createGameSources()
 
 export function getAvailableGameSource(
   id: GameSourceId,

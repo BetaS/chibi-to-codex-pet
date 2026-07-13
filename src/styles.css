@@ -244,6 +244,10 @@ h1 {
   margin-top: 0.9rem;
 }
 
+.preset-load-actions {
+  grid-template-columns: 1fr;
+}
+
 .source-mode-toggle {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -1442,7 +1446,13 @@ h1 {
   gap: 0.45rem;
 }
 
-.codex-pet-command span {
+.codex-pet-command label {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.codex-pet-command label > span,
+.codex-pet-command__copy-status {
   color: #7e8ba4;
   font-size: 0.67rem;
   font-weight: 800;
@@ -1451,6 +1461,14 @@ h1 {
 .codex-pet-command textarea {
   min-height: 5rem;
   resize: vertical;
+}
+
+.codex-pet-command .secondary-action {
+  justify-self: start;
+}
+
+.codex-pet-command__copy-status:empty {
+  display: none;
 }
 
 .codex-pet-installed-preview {
