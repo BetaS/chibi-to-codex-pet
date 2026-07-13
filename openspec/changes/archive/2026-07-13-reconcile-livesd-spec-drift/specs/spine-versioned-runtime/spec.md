@@ -1,10 +1,24 @@
-# Spine runtime integration 명세
+## REMOVED Requirements
 
-## Purpose
+### Requirement: Skeleton header 기반 runtime routing
 
-PRSK와 BanG Dream integration이 각각 기준 Spine 3.6·4.0 runtime을 소유하면서 API 격리, byte 정책, preview·export 일관성, provenance와 오류 경계를 유지하는 계약을 정의한다.
+**Reason**: 실제 제품은 skeleton header를 기준으로 PRSK와 BanG Dream runtime 사이를 전역 routing하지 않고 각 game integration이 기준 adapter를 소유한다.
 
-## Requirements
+**Migration**: `Integration별 기준 runtime 소유` 요구사항에서 source별 version 수용과 best-effort 정책을 정의한다.
+
+### Requirement: Preview와 export runtime profile 고정
+
+**Reason**: PRSK와 BanG Dream이 공유하는 runtime handoff facade는 production 경로에 없으며 각 integration이 preview와 sampler 일관성을 보장한다.
+
+**Migration**: `Preview와 export의 integration runtime 일관성` 요구사항을 사용한다.
+
+### Requirement: Runtime API facade
+
+**Reason**: 두 game integration은 하나의 version-independent preview facade를 공유하지 않고 공통 builder service 경계만 공유한다.
+
+**Migration**: `Integration별 runtime API 경계` 요구사항을 사용한다.
+
+## ADDED Requirements
 
 ### Requirement: Integration별 기준 runtime 소유
 
@@ -22,34 +36,6 @@ PRSK와 BanG Dream integration이 각각 기준 Spine 3.6·4.0 runtime을 소유
 #### Scenario: BanG Dream의 기준 runtime 밖 version
 - **WHEN** Garupa source가 `3.6` 또는 `4.1` header를 가진다
 - **THEN** Garupa importer는 `GARUPA_SKELETON_UNSUPPORTED_VERSION`과 실제 version을 반환하고 Spine runtime을 시작하지 않는다
-
-### Requirement: Runtime namespace와 상태 격리
-
-각 runtime profile은 자신의 API namespace, load promise, adapter factory와 rendering 자원을 소유해야 한다(MUST). Spine 4.0 loader는 기존 `window.spine` Spine 3.6 global을 덮어쓰거나 유효한 4.0 API로 오인해서는 안 되며(MUST NOT), 같은 profile의 동시 load는 하나의 promise와 runtime instance를 재사용해야 한다(MUST). 서로 다른 profile의 load·오류·dispose 상태는 상호 독립적이어야 한다(MUST).
-
-#### Scenario: 3.6 global과 4.0 동시 존재
-- **WHEN** 유효한 Spine 3.6 `window.spine`이 있는 상태에서 `spine-4.0`을 로드한다
-- **THEN** 4.0 API는 별도 namespace에서 반환되고 기존 global identity와 API shape은 변경되지 않는다
-
-#### Scenario: 같은 profile 동시 요청
-- **WHEN** 두 session이 `spine-4.0` load 완료 전에 동시에 요청한다
-- **THEN** loader는 같은 단일 load promise와 runtime instance를 두 요청에 제공한다
-
-#### Scenario: 4.0 load 실패 격리
-- **WHEN** Spine 4.0 runtime load가 실패한다
-- **THEN** 실패는 `spine-4.0` profile에만 귀속되고 이미 준비된 Spine 3.6 runtime과 session은 유지된다
-
-### Requirement: Version별 skeleton byte 정책
-
-Skeleton byte 변형은 각 game integration이 소유한 기준 adapter 내부 정책으로 제한해야 한다(MUST). PRSK의 Spine 3.6 adapter와 sampler는 명세된 trailing NUL 복사본을 parser에 전달해야 하고(MUST), BanG Dream의 Spine 4.0 adapter와 sampler는 원본 byte와 동일한 길이·내용의 view를 `SkeletonBinary`에 전달해야 한다(MUST). Source importer, integration과 공통 builder는 입력 source buffer를 직접 변경해서는 안 된다(MUST NOT).
-
-#### Scenario: 3.6 padding 유지
-- **WHEN** PRSK의 Spine 3.6 adapter 또는 sampler가 정상 skeleton을 파싱한다
-- **THEN** 원본보다 한 바이트 큰 별도 buffer와 trailing NUL을 parser에 전달하고 원본은 유지한다
-
-#### Scenario: 4.0 원본 byte 전달
-- **WHEN** BanG Dream의 Spine 4.0 adapter 또는 sampler가 정상 skeleton을 파싱한다
-- **THEN** parser가 받은 byte length와 내용은 source skeleton과 완전히 같고 trailing byte를 추가하지 않는다
 
 ### Requirement: Preview와 export의 integration runtime 일관성
 
@@ -83,18 +69,19 @@ PRSK와 BanG Dream integration은 skeleton parse, atlas parse, animation state, 
 - **WHEN** Spine 3.6과 4.0의 animation apply 또는 world transform API signature가 다르다
 - **THEN** 각 integration의 adapter가 차이를 내부에서 처리하고 공통 builder는 runtime version 조건문을 갖지 않는다
 
-### Requirement: Spine 4.0 runtime provenance와 라이선스
+## MODIFIED Requirements
 
-시스템은 Spine 4.0 runtime의 정확한 package 또는 upstream commit, version, 파일별 SHA-256, 원문 LICENSE와 copyright notice를 저장소에 기록해야 한다(MUST). Build-time 검사는 고정 dependency와 기록을 검증해야 하며(MUST), production 산출물은 실행에 필요한 runtime과 사용자가 접근 가능한 license notice만 포함하고 모델 asset은 포함해서는 안 된다(MUST NOT).
+### Requirement: Version별 skeleton byte 정책
 
-#### Scenario: 고정 runtime 검증
-- **WHEN** dependency provenance 검사를 실행한다
-- **THEN** Spine 4.0 runtime version·hash와 원문 LICENSE가 기록된 값과 일치한다
+Skeleton byte 변형은 각 game integration이 소유한 기준 adapter 내부 정책으로 제한해야 한다(MUST). PRSK의 Spine 3.6 adapter와 sampler는 명세된 trailing NUL 복사본을 parser에 전달해야 하고(MUST), BanG Dream의 Spine 4.0 adapter와 sampler는 원본 byte와 동일한 길이·내용의 view를 `SkeletonBinary`에 전달해야 한다(MUST). Source importer, integration과 공통 builder는 입력 source buffer를 직접 변경해서는 안 된다(MUST NOT).
 
-#### Scenario: production 고지
-- **WHEN** production build를 생성한다
-- **THEN** Spine 3.6과 4.0 runtime 각각의 원문 LICENSE와 출처를 확인할 수 있는 third-party notice가 포함된다
-- **AND** Garupa 또는 다른 게임의 skeleton, atlas와 PNG는 포함되지 않는다
+#### Scenario: 3.6 padding 유지
+- **WHEN** PRSK의 Spine 3.6 adapter 또는 sampler가 정상 skeleton을 파싱한다
+- **THEN** 원본보다 한 바이트 큰 별도 buffer와 trailing NUL을 parser에 전달하고 원본은 유지한다
+
+#### Scenario: 4.0 원본 byte 전달
+- **WHEN** BanG Dream의 Spine 4.0 adapter 또는 sampler가 정상 skeleton을 파싱한다
+- **THEN** parser가 받은 byte length와 내용은 source skeleton과 완전히 같고 trailing byte를 추가하지 않는다
 
 ### Requirement: 안정적인 versioned runtime 오류 계약
 

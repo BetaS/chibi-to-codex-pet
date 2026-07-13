@@ -86,17 +86,19 @@ function messageKeyForCode(code: string): MessageKey {
   return 'garupa.error.generic'
 }
 
-function safeDetails(value: unknown): TranslationValues {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return {}
-  }
+function safeDetails(...values: readonly unknown[]): TranslationValues {
   const details: Record<string, string | number> = {}
-  for (const [key, detail] of Object.entries(value)) {
-    if (!SAFE_DETAIL_KEYS.has(key)) continue
-    if (typeof detail === 'number' && Number.isFinite(detail)) {
-      details[key] = detail
-    } else if (typeof detail === 'string' && detail.length <= 128) {
-      details[key] = detail
+  for (const value of values) {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      continue
+    }
+    for (const [key, detail] of Object.entries(value)) {
+      if (!SAFE_DETAIL_KEYS.has(key)) continue
+      if (typeof detail === 'number' && Number.isFinite(detail)) {
+        details[key] = detail
+      } else if (typeof detail === 'string' && detail.length <= 128) {
+        details[key] = detail
+      }
     }
   }
   return Object.freeze(details)
@@ -106,7 +108,11 @@ export function toGarupaDiagnostic(
   error: unknown,
   generation: number,
 ): GarupaDiagnostic {
-  const candidate = error as { readonly code?: unknown; readonly details?: unknown }
+  const candidate = error as {
+    readonly code?: unknown
+    readonly context?: unknown
+    readonly details?: unknown
+  }
   const candidateCode =
     typeof candidate?.code === 'string' ? candidate.code : 'GARUPA_FAILED'
   const code = KNOWN_CODES.has(candidateCode) ? candidateCode : 'GARUPA_FAILED'
@@ -114,6 +120,6 @@ export function toGarupaDiagnostic(
     code,
     generation,
     messageKey: messageKeyForCode(code),
-    values: safeDetails(candidate?.details),
+    values: safeDetails(candidate?.details, candidate?.context, candidate),
   })
 }
