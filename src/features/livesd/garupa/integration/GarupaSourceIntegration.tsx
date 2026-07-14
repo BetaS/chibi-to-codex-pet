@@ -22,18 +22,10 @@ import { useCodexPetPresetSession } from '../../../codex-pet/useCodexPetPresetSe
 import type { LiveSDFrameSamplingInput } from '../../export/types'
 import {
   LIVE_SD_FRAMING_OFFSET_DEFAULT,
-  LIVE_SD_FRAMING_OFFSET_STEP,
-  LIVE_SD_FRAMING_OFFSET_X_MAX,
-  LIVE_SD_FRAMING_OFFSET_X_MIN,
-  LIVE_SD_FRAMING_OFFSET_Y_MAX,
-  LIVE_SD_FRAMING_OFFSET_Y_MIN,
   type LiveSDFramingOffset,
 } from '../../rendering/framingOffset'
 import {
   LIVE_SD_FRAMING_SCALE_DEFAULT,
-  LIVE_SD_FRAMING_SCALE_MAX,
-  LIVE_SD_FRAMING_SCALE_MIN,
-  LIVE_SD_FRAMING_SCALE_STEP,
 } from '../../rendering/framingScale'
 import {
   normalizeLiveSDLookTarget,
@@ -47,6 +39,7 @@ import {
   SearchableCombobox,
   type SearchableComboboxOption,
 } from '../../ui/SearchableCombobox'
+import { LiveSDFramingControls } from '../../ui/LiveSDFramingControls'
 import {
   GarupaSpine40FrameSampler,
   officialGarupaSpine40RuntimeAdapter,
@@ -452,8 +445,6 @@ export function GarupaSourceIntegration({
     )
   }
 
-  const framingScalePercent = Math.round(framingScale * 100)
-
   return (
     <>
       <div className="workspace-grid">
@@ -477,96 +468,15 @@ export function GarupaSourceIntegration({
               </h2>
             </div>
             <div className="preview-toolbar__controls">
-              <fieldset className="framing-scale-control" disabled={!ready}>
-                <legend>{t('prsk.framing')}</legend>
-                <div className="framing-scale-control__input-row">
-                  <label htmlFor="garupa-pet-framing-scale">
-                    {t('prsk.petSize')}
-                  </label>
-                  <input
-                    aria-label={t('prsk.petSizeSlider')}
-                    aria-valuetext={t('common.percentValue', {
-                      value: framingScalePercent,
-                    })}
-                    id="garupa-pet-framing-scale"
-                    max={LIVE_SD_FRAMING_SCALE_MAX * 100}
-                    min={LIVE_SD_FRAMING_SCALE_MIN * 100}
-                    onChange={(event) =>
-                      updateFramingScale(Number(event.target.value) / 100)
-                    }
-                    step={LIVE_SD_FRAMING_SCALE_STEP * 100}
-                    type="range"
-                    value={framingScalePercent}
-                  />
-                  <output htmlFor="garupa-pet-framing-scale">
-                    {framingScalePercent}%
-                  </output>
-                </div>
-                <div className="framing-scale-control__input-row">
-                  <label htmlFor="garupa-pet-framing-offset-x">
-                    {t('prsk.offsetX')}
-                  </label>
-                  <input
-                    aria-label={t('prsk.offsetXSlider')}
-                    aria-valuetext={t('common.pixelValue', {
-                      value: framingOffset.x,
-                    })}
-                    id="garupa-pet-framing-offset-x"
-                    max={LIVE_SD_FRAMING_OFFSET_X_MAX}
-                    min={LIVE_SD_FRAMING_OFFSET_X_MIN}
-                    onChange={(event) =>
-                      updateFramingOffset({
-                        ...framingOffset,
-                        x: Number(event.target.value),
-                      })
-                    }
-                    step={LIVE_SD_FRAMING_OFFSET_STEP}
-                    type="range"
-                    value={framingOffset.x}
-                  />
-                  <output htmlFor="garupa-pet-framing-offset-x">
-                    {t('common.pixelValue', { value: framingOffset.x })}
-                  </output>
-                </div>
-                <div className="framing-scale-control__input-row">
-                  <label htmlFor="garupa-pet-framing-offset-y">
-                    {t('prsk.offsetY')}
-                  </label>
-                  <input
-                    aria-label={t('prsk.offsetYSlider')}
-                    aria-valuetext={t('common.pixelValue', {
-                      value: framingOffset.y,
-                    })}
-                    id="garupa-pet-framing-offset-y"
-                    max={LIVE_SD_FRAMING_OFFSET_Y_MAX}
-                    min={LIVE_SD_FRAMING_OFFSET_Y_MIN}
-                    onChange={(event) =>
-                      updateFramingOffset({
-                        ...framingOffset,
-                        y: Number(event.target.value),
-                      })
-                    }
-                    step={LIVE_SD_FRAMING_OFFSET_STEP}
-                    type="range"
-                    value={framingOffset.y}
-                  />
-                  <output htmlFor="garupa-pet-framing-offset-y">
-                    {t('common.pixelValue', { value: framingOffset.y })}
-                  </output>
-                </div>
-                <button
-                  disabled={
-                    !ready ||
-                    (framingScale === LIVE_SD_FRAMING_SCALE_DEFAULT &&
-                      framingOffset.x === LIVE_SD_FRAMING_OFFSET_DEFAULT.x &&
-                      framingOffset.y === LIVE_SD_FRAMING_OFFSET_DEFAULT.y)
-                  }
-                  onClick={resetFraming}
-                  type="button"
-                >
-                  {t('prsk.resetFraming')}
-                </button>
-              </fieldset>
+              <LiveSDFramingControls
+                disabled={!ready}
+                framingOffset={framingOffset}
+                framingScale={framingScale}
+                idPrefix="garupa"
+                onOffsetChange={updateFramingOffset}
+                onReset={resetFraming}
+                onScaleChange={updateFramingScale}
+              />
               <div className="animation-picker">
                 <SearchableCombobox
                   disabled={!ready}
@@ -577,6 +487,7 @@ export function GarupaSourceIntegration({
                   onChange={playDirectAnimation}
                   options={animationOptions}
                   placeholder={t('garupa.animationSearch')}
+                  providerCapability="animation-selection"
                   queryResetKey={animationQueryResetKey}
                   value={currentAnimation}
                 />
@@ -610,6 +521,7 @@ export function GarupaSourceIntegration({
               </span>
               <canvas
                 aria-label={t('garupa.canvasLabel')}
+                data-provider-capability="preview"
                 height={208}
                 onPointerCancel={clearPreviewLookTarget}
                 onPointerLeave={clearPreviewLookTarget}

@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useId,
   useLayoutEffect,
   useMemo,
@@ -9,14 +10,21 @@ import {
   type KeyboardEvent,
   type MouseEvent,
 } from 'react'
+import { createPortal } from 'react-dom'
+
+import type { ProviderComboboxCapability } from '../../providerIntegrationContract'
 
 import { useI18n } from '../../../i18n'
 import {
   filterComboboxOptions,
   type SearchableComboboxOption,
+  type SearchableComboboxOptionGroup,
 } from './searchableComboboxOptions'
 
-export type { SearchableComboboxOption } from './searchableComboboxOptions'
+export type {
+  SearchableComboboxOption,
+  SearchableComboboxOptionGroup,
+} from './searchableComboboxOptions'
 
 export interface SearchableComboboxProps {
   readonly className?: string
@@ -38,6 +46,7 @@ export interface SearchableComboboxProps {
   readonly onQueryChange?: (query: string) => void
   readonly options: readonly SearchableComboboxOption[]
   readonly placeholder?: string
+  readonly providerCapability?: ProviderComboboxCapability
   readonly query?: string
   readonly queryResetKey?: number | string
   readonly value: string | null
@@ -54,8 +63,138 @@ interface InteractionState {
   readonly resetKey: SearchableComboboxProps['queryResetKey']
 }
 
+interface IndexedComboboxOption {
+  readonly index: number
+  readonly option: SearchableComboboxOption
+}
+
+interface ComboboxOptionSection {
+  readonly group: SearchableComboboxOptionGroup | null
+  readonly options: readonly IndexedComboboxOption[]
+}
+
+type ListboxPlacement = 'above' | 'below'
+
+interface ListboxLayout {
+  readonly anchorBottom: number
+  readonly anchorTop: number
+  readonly left: number
+  readonly maxHeight: number
+  readonly placement: ListboxPlacement
+  readonly viewportHeight: number
+  readonly width: number
+}
+
+const LISTBOX_MAX_HEIGHT_PX = 18 * 16
+const LISTBOX_MAX_VIEWPORT_RATIO = 0.45
+const LISTBOX_VIEWPORT_GAP_PX = 8
+const LISTBOX_ANCHOR_GAP_PX = 2
+
+function resolveListboxLayout(
+  input: HTMLInputElement,
+  listbox?: HTMLUListElement | null,
+): ListboxLayout {
+  const rect = input.getBoundingClientRect()
+  const view = input.ownerDocument.defaultView
+  const viewportHeight = Math.max(1, view?.innerHeight ?? 1)
+  const viewportWidth = Math.max(1, view?.innerWidth ?? 1)
+  const heightCap = Math.min(
+    LISTBOX_MAX_HEIGHT_PX,
+    viewportHeight * LISTBOX_MAX_VIEWPORT_RATIO,
+  )
+  const measuredHeight = listbox?.scrollHeight ?? 0
+  const desiredHeight = Math.min(
+    heightCap,
+    measuredHeight > 0 ? measuredHeight : heightCap,
+  )
+  const spaceAbove = Math.max(
+    0,
+    rect.top - LISTBOX_VIEWPORT_GAP_PX - LISTBOX_ANCHOR_GAP_PX,
+  )
+  const spaceBelow = Math.max(
+    0,
+    viewportHeight -
+      rect.bottom -
+      LISTBOX_VIEWPORT_GAP_PX -
+      LISTBOX_ANCHOR_GAP_PX,
+  )
+  const placement: ListboxPlacement =
+    spaceBelow < desiredHeight && spaceAbove > spaceBelow ? 'above' : 'below'
+  const availableHeight = placement === 'above' ? spaceAbove : spaceBelow
+  const maxHeight = Math.max(1, Math.min(heightCap, availableHeight))
+  const width = Math.max(
+    1,
+    Math.min(
+      rect.width || input.offsetWidth || 1,
+      viewportWidth - LISTBOX_VIEWPORT_GAP_PX * 2,
+    ),
+  )
+  const maximumLeft = Math.max(
+    LISTBOX_VIEWPORT_GAP_PX,
+    viewportWidth - LISTBOX_VIEWPORT_GAP_PX - width,
+  )
+  const left = Math.min(
+    Math.max(rect.left, LISTBOX_VIEWPORT_GAP_PX),
+    maximumLeft,
+  )
+
+  return {
+    anchorBottom: rect.bottom,
+    anchorTop: rect.top,
+    left,
+    maxHeight,
+    placement,
+    viewportHeight,
+    width,
+  }
+}
+
+function sameListboxLayout(
+  left: ListboxLayout | null,
+  right: ListboxLayout,
+): boolean {
+  return Boolean(
+    left &&
+      left.anchorBottom === right.anchorBottom &&
+      left.anchorTop === right.anchorTop &&
+      left.left === right.left &&
+      left.maxHeight === right.maxHeight &&
+      left.placement === right.placement &&
+      left.viewportHeight === right.viewportHeight &&
+      left.width === right.width,
+  )
+}
+
 function joinClassNames(...classNames: (string | undefined)[]): string {
   return classNames.filter(Boolean).join(' ')
+}
+
+function sectionComboboxOptions(
+  options: readonly SearchableComboboxOption[],
+): readonly ComboboxOptionSection[] {
+  const sections: Array<{
+    group: SearchableComboboxOptionGroup | null
+    options: IndexedComboboxOption[]
+  }> = []
+
+  options.forEach((option, index) => {
+    const group = option.group ?? null
+    const current = sections.at(-1)
+    const sameGroup = current
+      ? current.group?.key === group?.key &&
+        current.group?.label === group?.label
+      : false
+    if (current && sameGroup) {
+      current.options.push({ index, option })
+      return
+    }
+    sections.push({
+      group,
+      options: [{ index, option }],
+    })
+  })
+
+  return sections
 }
 
 export function SearchableCombobox({
@@ -75,6 +214,7 @@ export function SearchableCombobox({
   onQueryChange,
   options,
   placeholder,
+  providerCapability,
   query: controlledQuery,
   queryResetKey,
   value,
@@ -100,6 +240,10 @@ export function SearchableCombobox({
     resetKey: queryResetKey,
   })
   const activeOptionRef = useRef<HTMLLIElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const listboxRef = useRef<HTMLUListElement>(null)
+  const [listboxLayout, setListboxLayout] =
+    useState<ListboxLayout | null>(null)
 
   const uncontrolledQuery = Object.is(queryState.resetKey, queryResetKey)
     ? queryState.value
@@ -108,6 +252,10 @@ export function SearchableCombobox({
   const filteredOptions = useMemo(
     () => filterComboboxOptions(options, query),
     [options, query],
+  )
+  const optionSections = useMemo(
+    () => sectionComboboxOptions(filteredOptions),
+    [filteredOptions],
   )
   const selectedOption = options.find((option) => option.value === value)
   const unavailable =
@@ -141,6 +289,34 @@ export function SearchableCombobox({
     }
   }, [activeIndex, activeOptionValue, open])
 
+  useLayoutEffect(() => {
+    if (!open) {
+      return
+    }
+
+    const input = inputRef.current
+    if (!input) {
+      return
+    }
+    const view = input.ownerDocument.defaultView
+    const updateLayout = () => {
+      const nextLayout = resolveListboxLayout(input, listboxRef.current)
+      setListboxLayout((currentLayout) =>
+        sameListboxLayout(currentLayout, nextLayout)
+          ? currentLayout
+          : nextLayout,
+      )
+    }
+
+    updateLayout()
+    view?.addEventListener('resize', updateLayout)
+    input.ownerDocument.addEventListener('scroll', updateLayout, true)
+    return () => {
+      view?.removeEventListener('resize', updateLayout)
+      input.ownerDocument.removeEventListener('scroll', updateLayout, true)
+    }
+  }, [filteredOptions, open])
+
   const updateQuery = (nextQuery: string) => {
     if (controlledQuery === undefined) {
       setQueryState({ resetKey: queryResetKey, value: nextQuery })
@@ -156,6 +332,9 @@ export function SearchableCombobox({
     const selectedIndex = filteredOptions.findIndex(
       (option) => option.value === value,
     )
+    if (inputRef.current) {
+      setListboxLayout(resolveListboxLayout(inputRef.current))
+    }
     setInteraction({
       activeIndex:
         selectedIndex >= 0 ? selectedIndex : filteredOptions.length > 0 ? 0 : -1,
@@ -165,6 +344,7 @@ export function SearchableCombobox({
   }
 
   const closeListbox = () => {
+    setListboxLayout(null)
     setInteraction({
       activeIndex: -1,
       open: false,
@@ -188,6 +368,7 @@ export function SearchableCombobox({
     const nextQuery = event.target.value
     const nextOptions = filterComboboxOptions(options, nextQuery)
     updateQuery(nextQuery)
+    setListboxLayout(resolveListboxLayout(event.currentTarget))
     setInteraction({
       activeIndex: nextOptions.length > 0 ? 0 : -1,
       open: true,
@@ -277,9 +458,110 @@ export function SearchableCombobox({
             ? noResultsMessage
             : ''
 
+  const renderOption = ({
+    index,
+    option,
+  }: IndexedComboboxOption) => {
+    const highlighted = index === activeIndex
+    const selected = option.value === value
+    return (
+      <li
+        aria-selected={selected}
+        className={joinClassNames(
+          'searchable-combobox__option',
+          highlighted
+            ? 'searchable-combobox__option--highlighted'
+            : undefined,
+          selected
+            ? 'searchable-combobox__option--selected'
+            : undefined,
+        )}
+        data-highlighted={highlighted || undefined}
+        id={`${listboxId}-option-${index}`}
+        key={option.value}
+        onClick={() => commitOption(option)}
+        onMouseDown={(event: MouseEvent<HTMLLIElement>) => {
+          event.preventDefault()
+        }}
+        onMouseMove={() => {
+          if (!highlighted) {
+            setInteraction({
+              activeIndex: index,
+              open: true,
+              resetKey: queryResetKey,
+            })
+          }
+        }}
+        ref={highlighted ? activeOptionRef : undefined}
+        role="option"
+      >
+        {option.label}
+      </li>
+    )
+  }
+
+  const listbox = open ? (
+    <ul
+      aria-labelledby={labelId}
+      className="searchable-combobox__listbox"
+      data-placement={listboxLayout?.placement ?? 'below'}
+      id={listboxId}
+      ref={listboxRef}
+      role="listbox"
+      style={listboxLayout
+        ? {
+            bottom: listboxLayout.placement === 'above'
+              ? listboxLayout.viewportHeight -
+                listboxLayout.anchorTop +
+                LISTBOX_ANCHOR_GAP_PX
+              : 'auto',
+            left: listboxLayout.left,
+            maxHeight: listboxLayout.maxHeight,
+            top: listboxLayout.placement === 'below'
+              ? listboxLayout.anchorBottom + LISTBOX_ANCHOR_GAP_PX
+              : 'auto',
+            width: listboxLayout.width,
+          }
+        : undefined}
+    >
+      {optionSections.map((section, sectionIndex) => {
+        if (!section.group) {
+          return (
+            <Fragment key={`ungrouped-${sectionIndex}`}>
+              {section.options.map(renderOption)}
+            </Fragment>
+          )
+        }
+        const headingId = `${listboxId}-group-${sectionIndex}`
+        return (
+          <li
+            aria-labelledby={headingId}
+            className="searchable-combobox__group"
+            key={`${section.group.key}-${sectionIndex}`}
+            role="group"
+          >
+            <div
+              className="searchable-combobox__group-heading"
+              id={headingId}
+            >
+              {section.group.label}
+            </div>
+            <ul
+              className="searchable-combobox__group-options"
+              role="presentation"
+            >
+              {section.options.map(renderOption)}
+            </ul>
+          </li>
+        )
+      })}
+    </ul>
+  ) : null
+
   return (
     <div
       className={joinClassNames('searchable-combobox', className)}
+      data-provider-capability={providerCapability}
       data-state={
         error
           ? 'error'
@@ -322,58 +604,15 @@ export function SearchableCombobox({
         }}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
+        ref={inputRef}
         role="combobox"
         type="text"
         value={inputValue}
       />
 
-      {open ? (
-        <ul
-          aria-labelledby={labelId}
-          className="searchable-combobox__listbox"
-          id={listboxId}
-          role="listbox"
-        >
-          {filteredOptions.map((option, index) => {
-            const highlighted = index === activeIndex
-            const selected = option.value === value
-            return (
-              <li
-                aria-selected={selected}
-                className={joinClassNames(
-                  'searchable-combobox__option',
-                  highlighted
-                    ? 'searchable-combobox__option--highlighted'
-                    : undefined,
-                  selected
-                    ? 'searchable-combobox__option--selected'
-                    : undefined,
-                )}
-                data-highlighted={highlighted || undefined}
-                id={`${listboxId}-option-${index}`}
-                key={option.value}
-                onClick={() => commitOption(option)}
-                onMouseDown={(event: MouseEvent<HTMLLIElement>) => {
-                  event.preventDefault()
-                }}
-                onMouseMove={() => {
-                  if (!highlighted) {
-                    setInteraction({
-                      activeIndex: index,
-                      open: true,
-                      resetKey: queryResetKey,
-                    })
-                  }
-                }}
-                ref={highlighted ? activeOptionRef : undefined}
-                role="option"
-              >
-                {option.label}
-              </li>
-            )
-          })}
-        </ul>
-      ) : null}
+      {listbox && typeof document !== 'undefined'
+        ? createPortal(listbox, document.body)
+        : listbox}
 
       <p
         aria-atomic="true"

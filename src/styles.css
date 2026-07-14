@@ -605,12 +605,8 @@ h1 {
 }
 
 .searchable-combobox__listbox {
-  position: absolute;
-  z-index: 30;
-  top: calc(100% - 0.05rem);
-  right: 0;
-  left: 0;
-  max-height: min(18rem, 45vh);
+  position: fixed;
+  z-index: 1000;
   margin: 0;
   padding: 0.35rem;
   overflow: auto;
@@ -618,6 +614,39 @@ h1 {
   border-radius: 0.7rem;
   background: #0c1322;
   box-shadow: 0 1rem 2.5rem rgb(0 0 0 / 45%);
+  list-style: none;
+}
+
+.searchable-combobox__group {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.searchable-combobox__group + .searchable-combobox__group {
+  margin-top: 0.3rem;
+  padding-top: 0.3rem;
+  border-top: 1px solid rgb(145 167 255 / 13%);
+}
+
+.searchable-combobox__group-heading {
+  position: sticky;
+  z-index: 1;
+  top: -0.35rem;
+  padding: 0.42rem 0.65rem 0.32rem;
+  color: #7786aa;
+  background: #0c1322;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.045em;
+  line-height: 1.2;
+  pointer-events: none;
+  user-select: none;
+}
+
+.searchable-combobox__group-options {
+  margin: 0;
+  padding: 0;
   list-style: none;
 }
 

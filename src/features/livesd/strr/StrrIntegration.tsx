@@ -30,18 +30,10 @@ import {
 } from '../adapter'
 import {
   LIVE_SD_FRAMING_OFFSET_DEFAULT,
-  LIVE_SD_FRAMING_OFFSET_STEP,
-  LIVE_SD_FRAMING_OFFSET_X_MAX,
-  LIVE_SD_FRAMING_OFFSET_X_MIN,
-  LIVE_SD_FRAMING_OFFSET_Y_MAX,
-  LIVE_SD_FRAMING_OFFSET_Y_MIN,
   type LiveSDFramingOffset,
 } from '../rendering/framingOffset'
 import {
   LIVE_SD_FRAMING_SCALE_DEFAULT,
-  LIVE_SD_FRAMING_SCALE_MAX,
-  LIVE_SD_FRAMING_SCALE_MIN,
-  LIVE_SD_FRAMING_SCALE_STEP,
 } from '../rendering/framingScale'
 import {
   normalizeLiveSDLookTarget,
@@ -55,6 +47,7 @@ import {
   SearchableCombobox,
   type SearchableComboboxOption,
 } from '../ui/SearchableCombobox'
+import { LiveSDFramingControls } from '../ui/LiveSDFramingControls'
 import {
   loadStrrCatalog,
   loadStrrModel,
@@ -66,6 +59,7 @@ import {
   StrrProviderError,
   type StrrCatalog,
 } from './types'
+import { createStrrCharacterOptions } from './characterSections'
 
 type CatalogPhase = 'error' | 'idle' | 'loading' | 'ready'
 type ModelPhase = 'error' | 'idle' | 'loading' | 'ready'
@@ -213,20 +207,9 @@ export function StrrIntegration({
   }, [preview, resetPreviewControls])
 
   const characterOptions = useMemo<readonly SearchableComboboxOption[]>(
-    () =>
-      catalog?.characters
-        .map((character) => ({
-          label: localizeStrrLabels(
-            character.labels,
-            locale,
-            `#${character.id}`,
-          ),
-          value: character.id,
-        }))
-        .sort((left, right) =>
-          left.label.localeCompare(right.label, locale) ||
-          left.value.localeCompare(right.value, 'en'),
-        ) ?? [],
+    () => catalog
+      ? createStrrCharacterOptions(catalog.characters, locale)
+      : [],
     [catalog, locale],
   )
   const selectedCharacter = useMemo(
@@ -725,8 +708,6 @@ export function StrrIntegration({
     )
   }
 
-  const framingScalePercent = Math.round(framingScale * 100)
-
   const statusPhase = error
     ? 'error'
     : modelPhase === 'ready'
@@ -782,6 +763,7 @@ export function StrrIntegration({
             </div>
             <button
               className="primary-action"
+              data-provider-capability="catalog-load"
               disabled={
                 presetSession.selectedPresetName !== null ||
                 catalogPhase === 'loading' ||
@@ -815,6 +797,7 @@ export function StrrIntegration({
               onChange={selectCharacter}
               options={characterOptions}
               placeholder={t('strr.characterPlaceholder')}
+              providerCapability="character-selection"
               queryResetKey={characterQueryResetKey}
               value={selectedCharacterId}
             />
@@ -841,6 +824,7 @@ export function StrrIntegration({
               onChange={(editionId) => void loadModel(editionId)}
               options={editionOptions}
               placeholder={t('strr.editionPlaceholder')}
+              providerCapability="model-selection"
               queryResetKey={editionQueryResetKey}
               value={selectedEditionId}
             />
@@ -893,96 +877,15 @@ export function StrrIntegration({
               <h2 id="strr-preview-title">{previewTitle}</h2>
             </div>
             <div className="preview-toolbar__controls">
-              <fieldset className="framing-scale-control" disabled={!preview}>
-                <legend>{t('prsk.framing')}</legend>
-                <div className="framing-scale-control__input-row">
-                  <label htmlFor="strr-pet-framing-scale">
-                    {t('prsk.petSize')}
-                  </label>
-                  <input
-                    aria-label={t('prsk.petSizeSlider')}
-                    aria-valuetext={t('common.percentValue', {
-                      value: framingScalePercent,
-                    })}
-                    id="strr-pet-framing-scale"
-                    max={LIVE_SD_FRAMING_SCALE_MAX * 100}
-                    min={LIVE_SD_FRAMING_SCALE_MIN * 100}
-                    onChange={(event) =>
-                      updateFramingScale(Number(event.target.value) / 100)
-                    }
-                    step={LIVE_SD_FRAMING_SCALE_STEP * 100}
-                    type="range"
-                    value={framingScalePercent}
-                  />
-                  <output htmlFor="strr-pet-framing-scale">
-                    {framingScalePercent}%
-                  </output>
-                </div>
-                <div className="framing-scale-control__input-row">
-                  <label htmlFor="strr-pet-framing-offset-x">
-                    {t('prsk.offsetX')}
-                  </label>
-                  <input
-                    aria-label={t('prsk.offsetXSlider')}
-                    aria-valuetext={t('common.pixelValue', {
-                      value: framingOffset.x,
-                    })}
-                    id="strr-pet-framing-offset-x"
-                    max={LIVE_SD_FRAMING_OFFSET_X_MAX}
-                    min={LIVE_SD_FRAMING_OFFSET_X_MIN}
-                    onChange={(event) =>
-                      updateFramingOffset({
-                        ...framingOffset,
-                        x: Number(event.target.value),
-                      })
-                    }
-                    step={LIVE_SD_FRAMING_OFFSET_STEP}
-                    type="range"
-                    value={framingOffset.x}
-                  />
-                  <output htmlFor="strr-pet-framing-offset-x">
-                    {t('common.pixelValue', { value: framingOffset.x })}
-                  </output>
-                </div>
-                <div className="framing-scale-control__input-row">
-                  <label htmlFor="strr-pet-framing-offset-y">
-                    {t('prsk.offsetY')}
-                  </label>
-                  <input
-                    aria-label={t('prsk.offsetYSlider')}
-                    aria-valuetext={t('common.pixelValue', {
-                      value: framingOffset.y,
-                    })}
-                    id="strr-pet-framing-offset-y"
-                    max={LIVE_SD_FRAMING_OFFSET_Y_MAX}
-                    min={LIVE_SD_FRAMING_OFFSET_Y_MIN}
-                    onChange={(event) =>
-                      updateFramingOffset({
-                        ...framingOffset,
-                        y: Number(event.target.value),
-                      })
-                    }
-                    step={LIVE_SD_FRAMING_OFFSET_STEP}
-                    type="range"
-                    value={framingOffset.y}
-                  />
-                  <output htmlFor="strr-pet-framing-offset-y">
-                    {t('common.pixelValue', { value: framingOffset.y })}
-                  </output>
-                </div>
-                <button
-                  disabled={
-                    !preview ||
-                    (framingScale === LIVE_SD_FRAMING_SCALE_DEFAULT &&
-                      framingOffset.x === LIVE_SD_FRAMING_OFFSET_DEFAULT.x &&
-                      framingOffset.y === LIVE_SD_FRAMING_OFFSET_DEFAULT.y)
-                  }
-                  onClick={resetFraming}
-                  type="button"
-                >
-                  {t('prsk.resetFraming')}
-                </button>
-              </fieldset>
+              <LiveSDFramingControls
+                disabled={!preview}
+                framingOffset={framingOffset}
+                framingScale={framingScale}
+                idPrefix="strr"
+                onOffsetChange={updateFramingOffset}
+                onReset={resetFraming}
+                onScaleChange={updateFramingScale}
+              />
               <div className="animation-picker">
                 <SearchableCombobox
                   disabled={!preview}
@@ -993,6 +896,7 @@ export function StrrIntegration({
                   onChange={playDirectAnimation}
                   options={animationOptions}
                   placeholder={t('strr.animationPlaceholder')}
+                  providerCapability="animation-selection"
                   queryResetKey={animationQueryResetKey}
                   value={currentAnimation}
                 />
@@ -1020,6 +924,7 @@ export function StrrIntegration({
               </span>
               <canvas
                 aria-label={t('strr.canvasLabel')}
+                data-provider-capability="preview"
                 height={208}
                 onPointerCancel={clearPreviewLookTarget}
                 onPointerLeave={clearPreviewLookTarget}

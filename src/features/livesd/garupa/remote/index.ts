@@ -19,6 +19,7 @@ export {
   localizeGarupaCharacterName,
   parseGarupaPinnedCharacterCatalog,
   type GarupaCharacterCatalogResolution,
+  type GarupaCharacterKind,
   type GarupaLocalizedCharacterNames,
   type GarupaPinnedCharacterCatalog,
   type GarupaPinnedCharacterCatalogEntry,

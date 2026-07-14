@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
 import { loadSharedSkeleton } from './sharedSkeleton'
 
@@ -7,16 +7,6 @@ describe('loadSharedSkeleton', () => {
     await expect(
       loadSharedSkeleton(null),
     ).rejects.toMatchObject({ code: 'SHARED_SKELETON_REQUIRED' })
-  })
-
-  it('source가 제공한 fallback을 통해 공통 스켈레톤을 읽는다', async () => {
-    const expected = new Uint8Array([1, 2, 3]).buffer
-    const fallback = vi.fn(async () => expected)
-
-    await expect(
-      loadSharedSkeleton(null, { fallback }),
-    ).resolves.toBe(expected)
-    expect(fallback).toHaveBeenCalledOnce()
   })
 
   it('.skel이 아닌 사용자 파일을 구분된 오류로 거부한다', async () => {

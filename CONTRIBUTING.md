@@ -65,12 +65,42 @@ feat: fix: docs: test: refactor: chore:
 - 새 network 동작에는 사용자 trigger, 허용 origin, timeout, size limit, abort, credential과 referrer 정책을 함께 명세하고 테스트합니다.
 - 코드 주석은 불변식, 좌표 계약, 보안 이유처럼 코드만으로 드러나지 않는 사실을 설명합니다.
 
+### Provider integration development harness
+
+이 항목은 제품 기능을 정의하는 OpenSpec이 아니라, provider 구현이 서로 다른 방향으로 drift하지 않도록 막는 development merge gate입니다. `available`로 등록하는 모든 provider는 provider별 catalog 정규화, asset materialization, runtime adapter, 오류 변환과 기본값만 소유하고 아래 공통 capability surface는 공유 모듈을 조합해 제공해야 합니다.
+
+- preset 복원
+- 사용자가 명시적으로 실행하는 catalog load
+- catalog load 뒤 활성화되는 캐릭터 → 모델 순서의 검색 선택
+- 공통 framing, animation 선택과 state shortcut
+- preview canvas와 Codex Pet builder
+- mount 또는 remount만으로 network/resource load를 시작하지 않는 idle lifecycle
+
+공통 capability의 UI 또는 상태 계약을 바꿀 때는 먼저 `src/features/`의 공유 component·hook·contract를 수정하고 모든 provider에 동시에 적용합니다. Provider 내부에 공유 control을 복사해 별도 동작으로 발전시키거나 provider별 예외 allowlist로 검사를 우회하지 않습니다. Runtime 또는 source lifecycle 차이 때문에 orchestration을 공유할 수 없는 부분은 provider 경계에 남길 수 있지만, 위 capability surface와 사용자 관찰 순서는 유지합니다.
+
+새 provider를 `GAME_SOURCES`에 `available`로 추가하면 `src/features/providerIntegrationHarness.test.tsx`가 별도 case 등록 없이 해당 integration을 자동 검사합니다. 다음 명령은 capability 누락·중복, 초기 disabled 순서와 암묵적 network 요청을 검사하며 production build에도 포함된 필수 gate입니다.
+
+```bash
+pnpm verify:provider-harness
+```
+
+Provider가 추가될 때 repository·package·CI 경계도 자동으로 적용됩니다. Provider API response body와 실제 model/archive byte는 추적하지 않으며, acquisition·backup·변환·실자산 검증 script는 `*.local.mjs` 또는 `*.local.py`, 실제 provider smoke는 `*.local.spec.ts`로만 보존합니다. 이 파일들은 `.gitignore` 대상이고 root package script나 CI workflow에서 직접 호출하지 않습니다.
+
+```bash
+pnpm verify:repository-boundary
+```
+
+기본 `pnpm test:e2e`는 `*.local.spec.ts`를 제외합니다. 개발자가 적법하게 준비한 private fixture와 ignored local spec이 있는 경우에만 `pnpm test:e2e:local`을 명시적으로 실행합니다. Synthetic/intercepted response로 같은 contract를 검증할 수 있는 테스트는 CI-safe suite에 유지합니다.
+
 ## 5. Asset, 개인정보와 supply chain
 
 Commit에 포함할 수 있는 파일은 기여자가 배포 권리를 보유하고 공개 저장소에 적합한 자료로 제한됩니다.
 
 - `.env`, token, cookie, credential, 개인 hostname, tunnel URL, Sites project ID와 실제 Codex home path는 local 설정으로 관리합니다.
 - `.skel`, atlas, PNG, ZIP과 생성 Pet은 재배포 권리가 명시된 test fixture만 사용할 수 있습니다.
+- Provider API의 캡처 응답, Karth snapshot, character catalog dump와 PRSK·STRR·Garupa 원본 model pack은 source, test fixture, QA evidence 또는 package로 commit하지 않습니다.
+- Provider repository·immutable commit·URL·web viewer 연결, schema, digest, byte 수와 license 같은 provenance metadata는 실제 응답·asset byte를 포함하지 않는 범위에서 추적할 수 있습니다.
+- Provider 자료를 fetch, backup, decrypt, convert, install 또는 실제 byte로 inspect하는 도구와 결과는 ignored local 파일 또는 repository 밖에 둡니다.
 - Production source와 bundle의 resource 목록은 runtime provider 계약을 따르며 사용자 URL이나 character 선택을 고정 데이터로 포함하지 않습니다.
 - Remote document는 data로 검증하며 `eval`, `Function`, script injection과 dynamic import 실행 경로에 연결하지 않습니다.
 - Size, path, origin, alpha, geometry와 package validator는 외부 입력에 동일하게 적용합니다.
@@ -86,6 +116,7 @@ Generated `dist/`, test result, screenshot, local cache, 개인 IDE 설정과 lo
 pnpm typecheck
 pnpm lint
 pnpm test
+pnpm verify:repository-boundary
 pnpm build
 openspec validate --specs --strict
 ```
@@ -95,11 +126,11 @@ openspec validate --specs --strict
 | 변경 범위 | 추가 검사 |
 |---|---|
 | UI, WebGL, resource loading, download, install | `pnpm test:e2e` |
-| CLI package 또는 recipe renderer | `pnpm verify:local-npx -- --no-render` |
+| CLI package 또는 recipe renderer | `pnpm --filter chibi-to-codex-pet verify:pack` |
 | Vendored runtime | `pnpm verify:runtime` |
 | OpenSpec change | `openspec validate <change-name> --strict` |
 
-권리 제한 fixture가 필요한 테스트를 실행할 수 없었다면 PR에 정확한 test 이름과 이유를 기록합니다. 테스트 수정은 새 동작 계약을 명확히 표현해야 하며 검증 범위를 약화시키지 않아야 합니다.
+권리 제한 fixture가 필요한 `*.local.spec.ts`는 PR과 CI 범위에 넣지 않습니다. Local에서 실행하지 못한 실제 provider 검증이 있다면 PR에 test 목적과 이유를 기록하되 파일·경로·asset metadata는 첨부하지 않습니다. 테스트 수정은 새 동작 계약을 명확히 표현해야 하며 검증 범위를 약화시키지 않아야 합니다.
 
 ## 7. Pull request checklist
 

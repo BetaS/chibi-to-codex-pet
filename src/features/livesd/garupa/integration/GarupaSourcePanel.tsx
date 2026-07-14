@@ -18,17 +18,25 @@ import { toGarupaDiagnostic, type GarupaDiagnostic } from '../errors'
 import {
   loadGarupaPinnedCharacterCatalog,
   localizeGarupaCharacterName,
+  type GarupaCharacterKind,
   type GarupaPinnedCharacterCatalog,
   type GarupaPinnedCharacterCatalogEntry,
 } from '../remote'
+import {
+  compareGarupaCharacterSectionPlacements,
+  garupaCharacterSectionPlacement,
+} from './characterSections'
 import { GarupaSourceController } from './GarupaSourceController'
 
+const MOB_CHARACTER_GROUP = 'mob'
 const UNMAPPED_CHARACTER_GROUP = 'unmapped'
 
 interface GarupaCharacterModelGroup {
+  readonly bandId: number | null
   readonly characterId: number | null
   readonly entries: readonly GarupaPinnedCharacterCatalogEntry[]
   readonly key: string
+  readonly kind: GarupaCharacterKind
 }
 
 export interface GarupaSourcePanelProps {
@@ -46,9 +54,14 @@ function groupCharacterModels(
 ): readonly GarupaCharacterModelGroup[] {
   if (!catalog) return []
   const mapped = new Map<number, GarupaPinnedCharacterCatalogEntry[]>()
+  const mob: GarupaPinnedCharacterCatalogEntry[] = []
   const unmapped: GarupaPinnedCharacterCatalogEntry[] = []
   for (const entry of catalog.entries) {
-    if (entry.characterId === null) {
+    if (entry.characterKind === 'mob') {
+      mob.push(entry)
+      continue
+    }
+    if (entry.characterKind !== 'unique' || entry.characterId === null) {
       unmapped.push(entry)
       continue
     }
@@ -60,6 +73,7 @@ function groupCharacterModels(
   const groups: GarupaCharacterModelGroup[] = [...mapped.entries()]
     .sort(([left], [right]) => left - right)
     .map(([characterId, entries]) => Object.freeze({
+      bandId: entries[0]?.bandId ?? null,
       characterId,
       entries: Object.freeze(
         [...entries].sort((left, right) =>
@@ -67,9 +81,24 @@ function groupCharacterModels(
         ),
       ),
       key: `character:${characterId}`,
+      kind: 'unique',
     }))
+  if (mob.length > 0) {
+    groups.push(Object.freeze({
+      bandId: null,
+      characterId: null,
+      entries: Object.freeze(
+        [...mob].sort((left, right) =>
+          left.bundleName.localeCompare(right.bundleName, 'en'),
+        ),
+      ),
+      key: MOB_CHARACTER_GROUP,
+      kind: 'mob',
+    }))
+  }
   if (unmapped.length > 0) {
     groups.push(Object.freeze({
+      bandId: null,
       characterId: null,
       entries: Object.freeze(
         [...unmapped].sort((left, right) =>
@@ -77,9 +106,20 @@ function groupCharacterModels(
         ),
       ),
       key: UNMAPPED_CHARACTER_GROUP,
+      kind: 'unmapped',
     }))
   }
   return Object.freeze(groups)
+}
+
+function characterGroupKey(
+  entry: GarupaPinnedCharacterCatalogEntry,
+): string {
+  if (entry.characterKind === 'mob') return MOB_CHARACTER_GROUP
+  if (entry.characterKind === 'unique' && entry.characterId !== null) {
+    return `character:${entry.characterId}`
+  }
+  return UNMAPPED_CHARACTER_GROUP
 }
 
 export function GarupaSourcePanel({
@@ -125,18 +165,28 @@ export function GarupaSourcePanel({
           const localizedName = representative
             ? localizeGarupaCharacterName(representative, locale)
             : null
-          return {
-            label: group.characterId === null
-              ? t('garupa.unmappedCharacters')
-              : localizedName ?? `#${group.characterId}`,
+          const section = garupaCharacterSectionPlacement(group, locale)
+          const option = Object.freeze({
+            group: section.group,
+            label: group.kind === 'mob'
+              ? t('garupa.mobCharacters')
+              : group.kind === 'unmapped'
+                ? t('garupa.unmappedCharacters')
+                : localizedName ?? `#${group.characterId}`,
             value: group.key,
-          }
+          })
+          return { option, section }
         })
         .sort((left, right) => {
-          if (left.value === UNMAPPED_CHARACTER_GROUP) return 1
-          if (right.value === UNMAPPED_CHARACTER_GROUP) return -1
-          return left.label.localeCompare(right.label, locale)
-        }),
+          const placementOrder = compareGarupaCharacterSectionPlacements(
+            left.section,
+            right.section,
+          )
+          if (placementOrder !== 0) return placementOrder
+          return left.option.label.localeCompare(right.option.label, locale) ||
+            left.option.value.localeCompare(right.option.value, 'en')
+        })
+        .map(({ option }) => option),
     [characterGroups, locale, t],
   )
   const selectedCharacterGroup = useMemo(
@@ -206,11 +256,9 @@ export function GarupaSourcePanel({
             (entry) => entry.bundleName === selectedBundleName,
           )
         : null
-      const selectedEntryKey = selectedEntry?.characterId === null
-        ? UNMAPPED_CHARACTER_GROUP
-        : selectedEntry
-          ? `character:${selectedEntry.characterId}`
-          : null
+      const selectedEntryKey = selectedEntry
+        ? characterGroupKey(selectedEntry)
+        : null
       if (
         !selectedEntry ||
         (selectedCharacterKey && selectedEntryKey !== selectedCharacterKey)
@@ -220,10 +268,8 @@ export function GarupaSourcePanel({
       }
       if (
         selectedCharacterKey &&
-        !nextCatalog.entries.some((entry) =>
-          selectedCharacterKey === UNMAPPED_CHARACTER_GROUP
-            ? entry.characterId === null
-            : selectedCharacterKey === `character:${entry.characterId}`,
+        !nextCatalog.entries.some(
+          (entry) => selectedCharacterKey === characterGroupKey(entry),
         )
       ) {
         setSelectedCharacterKey(null)
@@ -299,6 +345,7 @@ export function GarupaSourcePanel({
         <div className="remote-actions garupa-catalog-actions">
           <button
             className="primary-action primary-action--compact"
+            data-provider-capability="catalog-load"
             disabled={
               selectedPresetName !== null ||
               catalogPhase === 'loading' ||
@@ -329,6 +376,7 @@ export function GarupaSourcePanel({
             onChange={selectCharacter}
             options={characterOptions}
             placeholder={t('garupa.characterSearchPlaceholder')}
+            providerCapability="character-selection"
             queryResetKey={characterQueryResetKey}
             value={selectedCharacterKey}
           />
@@ -347,6 +395,7 @@ export function GarupaSourcePanel({
             onChange={selectModel}
             options={modelOptions}
             placeholder={t('garupa.modelSearchPlaceholder')}
+            providerCapability="model-selection"
             queryResetKey={modelQueryResetKey}
             value={selectedBundleName}
           />
@@ -354,7 +403,7 @@ export function GarupaSourcePanel({
             <p className="input-hint" aria-live="polite">
               {t('garupa.characterCatalogReady', {
                 characters: characterGroups.filter(
-                  (group) => group.characterId !== null,
+                  (group) => group.kind !== 'unmapped',
                 ).length,
                 models: characterCatalog?.entries.length ?? 0,
               })}

@@ -850,7 +850,11 @@ function CodexPetBuilderContent({
   }
 
   return (
-    <section className="codex-pet-builder" aria-labelledby="codex-pet-builder-title">
+    <section
+      aria-labelledby="codex-pet-builder-title"
+      className="codex-pet-builder"
+      data-provider-capability="pet-builder"
+    >
       <div className="codex-pet-builder__header">
         <div>
           <p className="eyebrow">{t('builder.eyebrow')}</p>

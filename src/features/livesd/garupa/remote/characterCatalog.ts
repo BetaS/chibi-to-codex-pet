@@ -13,6 +13,7 @@ import { GARUPA_PINNED_PROVIDER_MANIFEST } from './providerManifest'
 
 const MAX_CHARACTER_RECORDS = 4_096
 const MAX_COSTUME_ROWS = 32_768
+const MAX_BAND_ID = 9_999
 const SAFE_BUNDLE_NAME = /^[A-Za-z0-9_][A-Za-z0-9_-]{0,127}$/
 
 export interface GarupaLocalizedCharacterNames {
@@ -28,9 +29,13 @@ export type GarupaCharacterCatalogResolution =
   | 'exact'
   | 'unresolved'
 
+export type GarupaCharacterKind = 'mob' | 'unique' | 'unmapped'
+
 export interface GarupaPinnedCharacterCatalogEntry {
+  readonly bandId: number | null
   readonly bundleName: string
   readonly characterId: number | null
+  readonly characterKind: GarupaCharacterKind
   readonly names: GarupaLocalizedCharacterNames | null
   readonly resolution: GarupaCharacterCatalogResolution
 }
@@ -50,6 +55,7 @@ export interface LoadGarupaPinnedCharacterCatalogOptions {
 }
 
 interface CharacterCandidate {
+  readonly bandId: number | null
   readonly characterId: number
   readonly characterType: string
   readonly names: GarupaLocalizedCharacterNames
@@ -103,6 +109,19 @@ function parseNames(value: unknown): GarupaLocalizedCharacterNames {
   })
 }
 
+function parseOptionalBandId(value: unknown): number | null {
+  if (value === undefined || value === null) return null
+  if (
+    typeof value !== 'number' ||
+    !Number.isSafeInteger(value) ||
+    value < 1 ||
+    value > MAX_BAND_ID
+  ) {
+    invalidCatalog('Garupa bandId 범위가 올바르지 않습니다.')
+  }
+  return value
+}
+
 function addCandidate(
   candidates: Map<string, CharacterCandidate[]>,
   bundleName: string,
@@ -148,6 +167,7 @@ function parseCharacterCandidates(
       invalidCatalog('Garupa characterType이 올바르지 않습니다.')
     }
     const candidate = Object.freeze({
+      bandId: parseOptionalBandId(rawCharacter.bandId),
       characterId,
       characterType: rawCharacter.characterType,
       names: parseNames(rawCharacter.characterName),
@@ -204,6 +224,20 @@ function resolveCandidate(
   return preferred.length === 1 ? preferred[0] ?? null : null
 }
 
+function candidateKind(
+  candidate: CharacterCandidate,
+): Exclude<GarupaCharacterKind, 'unmapped'> {
+  return candidate.characterType === 'unique' ? 'unique' : 'mob'
+}
+
+function ambiguousCandidateKind(
+  candidates: readonly CharacterCandidate[],
+): Extract<GarupaCharacterKind, 'mob' | 'unmapped'> {
+  return candidates.every((candidate) => candidate.characterType !== 'unique')
+    ? 'mob'
+    : 'unmapped'
+}
+
 export function parseGarupaPinnedCharacterCatalog(
   characterBytes: Uint8Array,
   availableBundleNames: readonly string[],
@@ -223,16 +257,20 @@ export function parseGarupaPinnedCharacterCatalog(
     const exact = resolveCandidate(exactCandidates)
     if (exact) {
       return Object.freeze({
+        bandId: exact.bandId,
         bundleName,
         characterId: exact.characterId,
+        characterKind: candidateKind(exact),
         names: exact.names,
         resolution: 'exact' as const,
       })
     }
     if (exactCandidates && exactCandidates.length > 0) {
       return Object.freeze({
+        bandId: null,
         bundleName,
         characterId: null,
+        characterKind: ambiguousCandidateKind(exactCandidates),
         names: null,
         resolution: 'ambiguous' as const,
       })
@@ -244,17 +282,31 @@ export function parseGarupaPinnedCharacterCatalog(
     const base = resolveCandidate(baseCandidates)
     if (base) {
       return Object.freeze({
+        bandId: base.bandId,
         bundleName,
         characterId: base.characterId,
+        characterKind: candidateKind(base),
         names: base.names,
         resolution: 'base' as const,
       })
     }
+    if (baseCandidates && baseCandidates.length > 0) {
+      return Object.freeze({
+        bandId: null,
+        bundleName,
+        characterId: null,
+        characterKind: ambiguousCandidateKind(baseCandidates),
+        names: null,
+        resolution: 'ambiguous' as const,
+      })
+    }
     return Object.freeze({
+      bandId: null,
       bundleName,
       characterId: null,
+      characterKind: 'unmapped' as const,
       names: null,
-      resolution: baseCandidates?.length ? 'ambiguous' as const : 'unresolved' as const,
+      resolution: 'unresolved' as const,
     })
   })
   return Object.freeze({ entries: Object.freeze(entries) })

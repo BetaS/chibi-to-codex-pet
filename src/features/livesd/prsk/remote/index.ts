@@ -5,6 +5,17 @@ export {
   resolvePrskChibiViewerBundleUrl,
 } from './catalogParsers'
 export {
+  findPrskRemoteModelSelection,
+  groupPrskRemoteCharacterModels,
+  prskCharacterUnitSearchTerms,
+  PRSK_CHARACTER_UNIT_ORDER,
+  type PrskCharacterUnitKey,
+  type PrskCharacterUnitSection,
+  type PrskRemoteCharacterGroup,
+  type PrskRemoteModelChoice,
+  type PrskRemoteModelSelection,
+} from './characterModelCatalog'
+export {
   isPrskRemoteError,
   PrskRemoteError,
   type PrskRemoteErrorCode,

@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -27,6 +33,56 @@ const catalog = parseStrrCatalog({
         },
       ],
     },
+    {
+      id: '201',
+      labels: { en: 'Tamao Tomoe', ko: '토모에 타마오' },
+      editions: [{
+        id: '2010001',
+        labels: { en: 'Rinmeikan Girls School', ko: '린메이칸 여학교' },
+        metadataSource: 'karth',
+        side: 'right',
+      }],
+    },
+    {
+      id: '301',
+      labels: { en: 'Aruru Otsuki', ko: '오츠키 아루루' },
+      editions: [{
+        id: '3010001',
+        labels: { en: 'Frontier School of Arts', ko: '프론티어 예술학교' },
+        metadataSource: 'karth',
+        side: 'right',
+      }],
+    },
+    {
+      id: '401',
+      labels: { en: 'Akira Yukishiro', ko: '유키시로 아키라' },
+      editions: [{
+        id: '4010001',
+        labels: { en: 'Siegfeld Institute of Music', ko: '시크펠트 음악학원' },
+        metadataSource: 'karth',
+        side: 'right',
+      }],
+    },
+    {
+      id: '501',
+      labels: { en: 'Koharu Yanagi', ko: '야나기 코하루' },
+      editions: [{
+        id: '5010001',
+        labels: { en: 'Seiran General Arts Institute', ko: '세이란 종합예술원' },
+        metadataSource: 'karth',
+        side: 'right',
+      }],
+    },
+    {
+      id: '901',
+      labels: { en: 'Sakura Shinguji', ko: '신구지 사쿠라' },
+      editions: [{
+        id: '9010001',
+        labels: { en: 'Collaboration', ko: '컬래버레이션' },
+        metadataSource: 'karth',
+        side: 'right',
+      }],
+    },
   ],
 })
 
@@ -51,6 +107,67 @@ function createSession(): LiveSDPreviewSession {
 }
 
 describe('StrrIntegration', () => {
+  it('캐릭터 selector를 공식 학교 section으로 나누고 alias로 검색한다', async () => {
+    const user = userEvent.setup()
+    const session = createSession()
+    const adapter: LiveSD36AdapterContract = {
+      inspectSkeleton: vi.fn(() => ({
+        compatibility: 'experimental' as const,
+        hash: 'fixture',
+        version: '3.6.52',
+      })),
+      createPreview: vi.fn(async () => session),
+    }
+    const catalogLoader = vi.fn(async () => catalog)
+    const modelLoader = vi.fn()
+
+    render(
+      <StrrIntegration
+        adapter={adapter}
+        catalogLoader={catalogLoader}
+        modelLoader={modelLoader}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', {
+      name: '캐릭터 목록 불러오기',
+    }))
+    const character = screen.getByRole('combobox', { name: '캐릭터 검색' })
+    await waitFor(() => expect(character).toBeEnabled())
+    await user.click(character)
+
+    const listbox = screen.getByRole('listbox', { name: '캐릭터 검색' })
+    expect(
+      within(listbox).getAllByRole('group').map(
+        (group) => group.querySelector(
+          '.searchable-combobox__group-heading',
+        )?.textContent,
+      ),
+    ).toEqual([
+      '세이쇼 음악학교',
+      '린메이칸 여학교',
+      '프론티어 예술학교',
+      '시크펠트 음악학원',
+      '세이란 종합예술원',
+      '기타',
+    ])
+    expect(
+      within(listbox).getAllByRole('option').map((option) => option.textContent),
+    ).toEqual([
+      '아이조 카렌',
+      '토모에 타마오',
+      '오츠키 아루루',
+      '유키시로 아키라',
+      '야나기 코하루',
+      '신구지 사쿠라',
+    ])
+
+    await user.type(character, 'seisho')
+    expect(within(listbox).getAllByRole('group')).toHaveLength(1)
+    expect(within(listbox).getByRole('option')).toHaveTextContent('아이조 카렌')
+    expect(modelLoader).not.toHaveBeenCalled()
+  })
+
   it('저장된 STRR source는 프리셋 불러오기 뒤에만 복원한다', async () => {
     const user = userEvent.setup()
     saveCodexPetSettingsPreset({

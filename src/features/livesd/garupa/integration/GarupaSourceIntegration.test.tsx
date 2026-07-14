@@ -122,8 +122,10 @@ describe('Garupa PRSK-aligned workspace', () => {
     const user = userEvent.setup()
     const catalog: GarupaPinnedCharacterCatalog = {
       entries: [{
+        bandId: 1,
         bundleName: '00001',
         characterId: 1,
+        characterKind: 'unique',
         names: {
           en: 'Kasumi Toyama',
           ja: '戸山 香澄',

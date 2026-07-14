@@ -61,8 +61,8 @@ interface Deferred<T> {
 }
 
 const REMOTE_CHARACTERS = [
-  { id: 'sd_21miku_normal', label: 'Hatsune Miku' },
-  { id: 'sd_21miku_street', label: 'Street Miku' },
+  { id: 'sd_21miku_normal', label: 'Normal' },
+  { id: 'sd_21miku_street', label: 'Street' },
   { id: 'sd_mob001', label: 'Mob Character' },
 ] as const
 
@@ -204,6 +204,39 @@ async function loadCustomRemoteCatalog(
   })
   await waitFor(() => expect(characterCombobox).toBeEnabled())
   return characterCombobox as HTMLInputElement
+}
+
+function remoteModelCombobox(): HTMLInputElement {
+  return screen.getByRole('combobox', {
+    name: '모델 검색',
+  }) as HTMLInputElement
+}
+
+async function selectRemoteCharacter(
+  user: AppUser,
+  characterName = '하츠네 미쿠',
+): Promise<void> {
+  await chooseSearchableOption(
+    user,
+    '캐릭터 검색',
+    characterName,
+  )
+}
+
+async function selectRemoteModel(
+  user: AppUser,
+  modelName: string,
+): Promise<void> {
+  await chooseSearchableOption(user, '모델 검색', modelName)
+}
+
+async function loadRemoteCharacterModel(
+  user: AppUser,
+  modelName = 'Normal',
+  characterName = '하츠네 미쿠',
+): Promise<void> {
+  await selectRemoteCharacter(user, characterName)
+  await selectRemoteModel(user, modelName)
 }
 
 function fileInputs(container: HTMLElement): readonly HTMLInputElement[] {
@@ -1278,11 +1311,15 @@ describe('App', () => {
     expect(screen.getByRole('combobox', {
       name: '캐릭터 검색',
     })).toBeDisabled()
-    expect(
-      screen.getByText(
-        `${new URL(PRSK_CHIBI_VIEWER_CATALOG_URL).origin} · ${new URL(PJSEK_AI_ASSET_BASE_URL).origin}`,
-      ),
-    ).toBeVisible()
+    expect(document.body).not.toHaveTextContent(
+      new URL(PRSK_CHIBI_VIEWER_CATALOG_URL).origin,
+    )
+    expect(document.body).not.toHaveTextContent(
+      new URL(PJSEK_AI_ASSET_BASE_URL).origin,
+    )
+    expect(screen.getByText(
+      '온라인 캐릭터는 변경되거나 제공이 중단될 수 있습니다. 불러오면 외부 서버에 연결됩니다.',
+    )).toBeVisible()
     expect(catalogSpy).not.toHaveBeenCalled()
     expect(modelSpy).not.toHaveBeenCalled()
     expect(inspectSpy).not.toHaveBeenCalled()
@@ -1354,7 +1391,7 @@ describe('App', () => {
     expect(modelSpy).not.toHaveBeenCalled()
   })
 
-  it('custom catalog의 캐릭터 검색과 highlight는 모델을 요청하지 않고 option commit만 요청한다', async () => {
+  it('custom catalog는 캐릭터 commit 뒤 모델 commit에서만 모델을 요청한다', async () => {
     const user = userEvent.setup()
     const catalog = createRemoteCatalog()
     const fixture = createSession()
@@ -1382,13 +1419,26 @@ describe('App', () => {
     await user.type(characterCombobox, 'MIKU')
 
     expect(searchableOptions().map((option) => option.textContent)).toEqual([
-      'Hatsune Miku',
-      'Street Miku',
+      '하츠네 미쿠',
     ])
     expect(modelSpy).not.toHaveBeenCalled()
     await user.keyboard('{ArrowDown}')
     expect(modelSpy).not.toHaveBeenCalled()
 
+    await user.keyboard('{Enter}')
+    expect(characterCombobox).toHaveValue('하츠네 미쿠')
+    expect(modelSpy).not.toHaveBeenCalled()
+
+    const modelCombobox = remoteModelCombobox()
+    expect(modelCombobox).toBeEnabled()
+    await user.click(modelCombobox)
+    await user.type(modelCombobox, 'STREET')
+    expect(searchableOptions().map((option) => option.textContent)).toEqual([
+      'Street',
+    ])
+    expect(modelSpy).not.toHaveBeenCalled()
+    await user.keyboard('{ArrowDown}')
+    expect(modelSpy).not.toHaveBeenCalled()
     await user.keyboard('{Enter}')
 
     await waitFor(() => expect(modelSpy).toHaveBeenCalledTimes(1))
@@ -1400,6 +1450,61 @@ describe('App', () => {
     expect(
       await screen.findByRole('heading', { name: 'sd_21miku_street' }),
     ).toBeVisible()
+    expect(screen.getByRole('textbox', { name: 'Pet 이름' })).toHaveValue(
+      'Street - 하츠네 미쿠',
+    )
+  })
+
+  it('PRSK locale 전환은 공식 캐릭터명만 갱신하고 선택, preview와 request를 보존한다', async () => {
+    const user = userEvent.setup()
+    const fixture = createSession()
+    const catalogSpy = vi
+      .spyOn(prskRemoteCatalogSource, 'load')
+      .mockResolvedValue(createRemoteCatalog())
+    const modelSpy = vi
+      .spyOn(prskRemoteResourceSource, 'load')
+      .mockResolvedValue(createRemoteModel('sd_21miku_normal'))
+    vi.spyOn(liveSD36Adapter, 'inspectSkeleton').mockReturnValue({
+      compatibility: 'best_effort',
+      hash: 'remote-hash',
+      version: '3.3',
+    })
+    const createSpy = vi
+      .spyOn(liveSD36Adapter, 'createPreview')
+      .mockResolvedValue(fixture.session)
+
+    render(<App />)
+    const characterCombobox = await loadCustomRemoteCatalog(user)
+    await loadRemoteCharacterModel(user)
+    await screen.findByRole('heading', { name: 'sd_21miku_normal' })
+
+    expect(characterCombobox).toHaveValue('하츠네 미쿠')
+    expect(screen.getByRole('textbox', { name: 'Pet 이름' })).toHaveValue(
+      'Normal - 하츠네 미쿠',
+    )
+    await user.click(screen.getByRole('button', { name: 'English' }))
+
+    const englishCharacterCombobox = screen.getByRole('combobox', {
+      name: 'Character search',
+    })
+    expect(englishCharacterCombobox).toHaveValue('Hatsune Miku')
+    expect(screen.getByRole('combobox', {
+      name: 'Model search',
+    })).toHaveValue('Normal')
+    expect(screen.getByRole('textbox', { name: 'Pet name' })).toHaveValue(
+      'Normal - 하츠네 미쿠',
+    )
+    await user.click(englishCharacterCombobox)
+    expect(screen.getByRole('option', {
+      name: 'Hatsune Miku',
+    })).toHaveAttribute('aria-selected', 'true')
+    await user.keyboard('{Escape}')
+
+    expect(catalogSpy).toHaveBeenCalledTimes(1)
+    expect(modelSpy).toHaveBeenCalledTimes(1)
+    expect(createSpy).toHaveBeenCalledTimes(1)
+    expect(fixture.dispose).not.toHaveBeenCalled()
+    expect(fixture.unsubscribe).not.toHaveBeenCalled()
   })
 
   it('catalog 재로드는 query와 제거된 option을 비우고 새 catalog에 남은 selection만 보존한다', async () => {
@@ -1430,34 +1535,39 @@ describe('App', () => {
 
     render(<App />)
     const characterCombobox = await loadCustomRemoteCatalog(user)
-    await user.click(characterCombobox)
-    await user.click(screen.getByRole('option', { name: 'Hatsune Miku' }))
+    await loadRemoteCharacterModel(user)
     await screen.findByRole('heading', { name: 'sd_21miku_normal' })
+    const modelCombobox = remoteModelCombobox()
 
     await user.click(characterCombobox)
+    await user.clear(characterCombobox)
     await user.type(characterCombobox, 'MIKU')
-    expect(searchableOptions()).toHaveLength(2)
+    expect(searchableOptions()).toHaveLength(1)
     await user.keyboard('{Escape}')
     await user.click(screen.getByRole('button', { name: '불러오기' }))
     await waitFor(() => expect(characterCombobox).toBeEnabled())
 
-    expect(characterCombobox).toHaveValue('Hatsune Miku')
+    expect(characterCombobox).toHaveValue('하츠네 미쿠')
+    expect(modelCombobox).toHaveValue('Normal')
     await user.click(characterCombobox)
-    expect(characterCombobox).toHaveValue('')
     const retainedOptions = searchableOptions()
     expect(retainedOptions.map((option) => option.textContent)).toEqual([
-      'Hatsune Miku',
-      'New Character',
+      '하츠네 미쿠',
+      'New',
     ])
-    expect(retainedOptions[0]).toHaveAttribute('aria-selected', 'true')
+    expect(retainedOptions.find(
+      (option) => option.textContent === '하츠네 미쿠',
+    )).toHaveAttribute('aria-selected', 'true')
     await user.keyboard('{Escape}')
 
     await user.click(screen.getByRole('button', { name: '불러오기' }))
     await waitFor(() => expect(characterCombobox).toBeEnabled())
     expect(characterCombobox).toHaveValue('')
+    expect(modelCombobox).toHaveValue('')
+    expect(modelCombobox).toBeDisabled()
     await user.click(characterCombobox)
     expect(searchableOptions().map((option) => option.textContent)).toEqual([
-      'New Character',
+      'New',
     ])
     expect(searchableOptions()[0]).toHaveAttribute('aria-selected', 'false')
     expect(catalogSpy).toHaveBeenCalledTimes(3)
@@ -1486,9 +1596,8 @@ describe('App', () => {
     vi.spyOn(liveSD36Adapter, 'createPreview').mockResolvedValue(fixture.session)
 
     render(<App />)
-    const characterCombobox = await loadCustomRemoteCatalog(user)
-    await user.click(characterCombobox)
-    await user.click(screen.getByRole('option', { name: 'Hatsune Miku' }))
+    await loadCustomRemoteCatalog(user)
+    await loadRemoteCharacterModel(user)
     await screen.findByRole('heading', { name: 'sd_21miku_normal' })
 
     const animationCombobox = screen.getByRole('combobox', {
@@ -1558,9 +1667,8 @@ describe('App', () => {
     )
 
     render(<App />)
-    const characterCombobox = await loadCustomRemoteCatalog(user)
-    await user.click(characterCombobox)
-    await user.click(screen.getByRole('option', { name: 'Hatsune Miku' }))
+    await loadCustomRemoteCatalog(user)
+    await loadRemoteCharacterModel(user)
     await screen.findByRole('heading', { name: 'sd_21miku_normal' })
 
     const animationCombobox = screen.getByRole('combobox', {
@@ -1579,9 +1687,7 @@ describe('App', () => {
     await user.keyboard('{Enter}')
     expect(first.session.play).toHaveBeenCalledWith('first_wave')
 
-    await user.click(characterCombobox)
-    await user.type(characterCombobox, 'STREET')
-    await user.click(screen.getByRole('option', { name: 'Street Miku' }))
+    await selectRemoteModel(user, 'Street')
     await screen.findByRole('heading', { name: 'sd_21miku_street' })
 
     expect(first.dispose).toHaveBeenCalledTimes(1)
@@ -1646,8 +1752,20 @@ describe('App', () => {
     expect(modelSpy).not.toHaveBeenCalled()
 
     await user.clear(characterCombobox)
-    expect(searchableOptions()).toHaveLength(3)
-    await user.click(screen.getByRole('option', { name: 'Hatsune Miku' }))
+    expect(searchableOptions()).toHaveLength(2)
+    await user.click(screen.getByRole('option', { name: '하츠네 미쿠' }))
+    expect(modelSpy).not.toHaveBeenCalled()
+
+    const modelCombobox = remoteModelCombobox()
+    await user.click(modelCombobox)
+    await user.type(modelCombobox, 'not-a-model')
+    expect(within(comboboxRoot(modelCombobox)).getByRole('status')).toHaveTextContent(
+      '검색 결과 없음',
+    )
+    await user.keyboard('{Enter}')
+    expect(modelSpy).not.toHaveBeenCalled()
+    await user.clear(modelCombobox)
+    await user.click(screen.getByRole('option', { name: 'Normal' }))
     await screen.findByRole('heading', { name: 'sd_21miku_normal' })
 
     const animationCombobox = screen.getByRole('combobox', {
@@ -1727,16 +1845,19 @@ describe('App', () => {
       await firstCatalogResult.promise
     })
     await user.click(characterCombobox)
-    expect(screen.queryByRole('option', { name: 'Stale Character' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Stale' })).not.toBeInTheDocument()
     expect(searchableOptions().map((option) => option.textContent)).toEqual([
-      'Hatsune Miku',
-      'Street Miku',
+      '하츠네 미쿠',
     ])
 
-    await user.click(screen.getByRole('option', { name: 'Hatsune Miku' }))
+    await user.click(screen.getByRole('option', { name: '하츠네 미쿠' }))
+    expect(modelSpy).not.toHaveBeenCalled()
+    const modelCombobox = remoteModelCombobox()
+    await user.click(modelCombobox)
+    await user.click(screen.getByRole('option', { name: 'Normal' }))
     const firstModelSignal = modelSpy.mock.calls[0]?.[0].signal
-    await user.click(characterCombobox)
-    await user.click(screen.getByRole('option', { name: 'Street Miku' }))
+    await user.click(modelCombobox)
+    await user.click(screen.getByRole('option', { name: 'Street' }))
 
     expect(firstModelSignal?.aborted).toBe(true)
     await act(async () => {
@@ -1789,21 +1910,22 @@ describe('App', () => {
 
     render(<App />)
     const characterCombobox = await loadCustomRemoteCatalog(user)
-    await user.click(characterCombobox)
-    await user.click(screen.getByRole('option', { name: 'Hatsune Miku' }))
+    await loadRemoteCharacterModel(user)
     await screen.findByRole('heading', { name: 'sd_21miku_normal' })
 
-    await user.click(characterCombobox)
-    await user.type(characterCombobox, 'STREET')
-    await user.click(screen.getByRole('option', { name: 'Street Miku' }))
+    await selectRemoteModel(user, 'Street')
     await waitFor(() => expect(modelSpy).toHaveBeenCalledTimes(2))
     const pendingSignal = modelSpy.mock.calls[1]?.[0].signal
     expect(pendingSignal?.aborted).toBe(false)
 
     await user.click(characterCombobox)
-    expect(characterCombobox).toHaveValue('STREET')
     await user.clear(characterCombobox)
     await user.type(characterCombobox, 'MIKU')
+    await user.keyboard('{ArrowDown}{ArrowUp}')
+    const modelCombobox = remoteModelCombobox()
+    await user.click(modelCombobox)
+    await user.clear(modelCombobox)
+    await user.type(modelCombobox, 'NOR')
     await user.keyboard('{ArrowDown}{ArrowUp}')
     const animationCombobox = screen.getByRole('combobox', {
       name: '애니메이션',
@@ -1862,8 +1984,7 @@ describe('App', () => {
       name: '캐릭터 검색',
     })
     await waitFor(() => expect(characterCombobox).toBeEnabled())
-    await user.click(characterCombobox)
-    await user.click(screen.getByRole('option', { name: 'Hatsune Miku' }))
+    await loadRemoteCharacterModel(user)
     const modelSignal = modelSpy.mock.calls[0]?.[0].signal
 
     expect(modelSignal?.aborted).toBe(false)
@@ -1918,9 +2039,9 @@ describe('App', () => {
 
     render(<App />)
     const characterCombobox = await loadCustomRemoteCatalog(user)
-    await user.click(characterCombobox)
-    await user.click(screen.getByRole('option', { name: 'Hatsune Miku' }))
+    await loadRemoteCharacterModel(user)
     await screen.findByRole('heading', { name: 'sd_21miku_normal' })
+    const modelCombobox = remoteModelCombobox()
 
     const animationCombobox = screen.getByRole('combobox', {
       name: '애니메이션',
@@ -1931,15 +2052,18 @@ describe('App', () => {
     await user.keyboard('{Escape}')
 
     await user.click(characterCombobox)
+    await user.clear(characterCombobox)
     await user.type(characterCombobox, 'MIKU')
-    await user.click(screen.getByRole('option', { name: 'Street Miku' }))
+    await user.keyboard('{Escape}')
+    await selectRemoteModel(user, 'Street')
 
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('REMOTE_NETWORK_OR_CORS')
     expect(screen.getByRole('heading', { name: 'sd_21miku_normal' })).toBeVisible()
     expect(fixture.dispose).not.toHaveBeenCalled()
     expect(fixture.unsubscribe).not.toHaveBeenCalled()
-    expect(characterCombobox).toHaveValue('Hatsune Miku')
+    expect(characterCombobox).toHaveValue('하츠네 미쿠')
+    expect(modelCombobox).toHaveValue('Street')
     expect(animationCombobox).toHaveValue('pose_default')
     expect(fixture.session.play).not.toHaveBeenCalled()
 
@@ -1947,10 +2071,16 @@ describe('App', () => {
     expect(characterCombobox).toHaveValue('MIKU')
     const characterOptions = searchableOptions()
     expect(characterOptions.map((option) => option.textContent)).toEqual([
-      'Hatsune Miku',
-      'Street Miku',
+      '하츠네 미쿠',
     ])
     expect(characterOptions[0]).toHaveAttribute('aria-selected', 'true')
+    await user.keyboard('{Escape}')
+
+    await user.click(modelCombobox)
+    expect(searchableOptions().map((option) => option.textContent)).toEqual([
+      'Street',
+    ])
+    expect(searchableOptions()[0]).toHaveAttribute('aria-selected', 'true')
     await user.keyboard('{Escape}')
 
     await user.click(animationCombobox)
@@ -1997,9 +2127,9 @@ describe('App', () => {
 
       render(<App />)
       const characterCombobox = await loadCustomRemoteCatalog(user)
-      await user.click(characterCombobox)
-      await user.click(screen.getByRole('option', { name: 'Hatsune Miku' }))
+      await loadRemoteCharacterModel(user)
       await screen.findByRole('heading', { name: 'sd_21miku_normal' })
+      const modelCombobox = remoteModelCombobox()
 
       const animationCombobox = screen.getByRole('combobox', {
         name: '애니메이션',
@@ -2008,20 +2138,23 @@ describe('App', () => {
       await user.type(animationCombobox, 'ID')
       await user.keyboard('{Escape}')
       await user.click(characterCombobox)
+      await user.clear(characterCombobox)
       await user.type(characterCombobox, 'MIKU')
-      await user.click(screen.getByRole('option', { name: 'Street Miku' }))
+      await user.keyboard('{Escape}')
+      await selectRemoteModel(user, 'Street')
 
       const alert = await screen.findByRole('alert')
       expect(alert).toHaveTextContent(code)
       expect(screen.getByRole('heading', { name: 'sd_21miku_normal' })).toBeVisible()
       expect(fixture.dispose).not.toHaveBeenCalled()
       expect(fixture.unsubscribe).not.toHaveBeenCalled()
-      expect(characterCombobox).toHaveValue('Hatsune Miku')
+      expect(characterCombobox).toHaveValue('하츠네 미쿠')
+      expect(modelCombobox).toHaveValue('Street')
       expect(animationCombobox).toHaveValue('pose_default')
 
       await user.click(characterCombobox)
       expect(characterCombobox).toHaveValue('MIKU')
-      expect(searchableOptions()).toHaveLength(2)
+      expect(searchableOptions()).toHaveLength(1)
       await user.keyboard('{Escape}')
       await user.click(animationCombobox)
       expect(animationCombobox).toHaveValue('ID')
@@ -2064,9 +2197,9 @@ describe('App', () => {
 
     render(<App />)
     const characterCombobox = await loadCustomRemoteCatalog(user)
-    await user.click(characterCombobox)
-    await user.click(screen.getByRole('option', { name: 'Hatsune Miku' }))
+    await loadRemoteCharacterModel(user)
     await screen.findByRole('heading', { name: 'sd_21miku_normal' })
+    const modelCombobox = remoteModelCombobox()
 
     const animationCombobox = screen.getByRole('combobox', {
       name: '애니메이션',
@@ -2074,18 +2207,17 @@ describe('App', () => {
     await user.click(animationCombobox)
     await user.type(animationCombobox, 'ID')
     await user.keyboard('{Escape}')
-    await user.click(characterCombobox)
-    await user.type(characterCombobox, 'STREET')
-    await user.click(screen.getByRole('option', { name: 'Street Miku' }))
+    await selectRemoteModel(user, 'Street')
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(2))
 
     expect(first.dispose).not.toHaveBeenCalled()
     expect(first.unsubscribe).not.toHaveBeenCalled()
     expect(screen.getByRole('heading', { name: 'sd_21miku_normal' })).toBeVisible()
-    await user.click(characterCombobox)
-    expect(characterCombobox).toHaveValue('STREET')
+    expect(characterCombobox).toHaveValue('하츠네 미쿠')
+    await user.click(modelCombobox)
+    expect(modelCombobox).toHaveValue('Street')
     expect(searchableOptions().map((option) => option.textContent)).toEqual([
-      'Street Miku',
+      'Street',
     ])
     await user.keyboard('{Escape}')
     await user.click(animationCombobox)
@@ -2105,11 +2237,12 @@ describe('App', () => {
     ).toBeVisible()
     expect(first.unsubscribe).toHaveBeenCalledTimes(1)
     expect(first.dispose).toHaveBeenCalledTimes(1)
-    expect(characterCombobox).toHaveValue('Street Miku')
+    expect(characterCombobox).toHaveValue('하츠네 미쿠')
+    expect(modelCombobox).toHaveValue('Street')
     expect(animationCombobox).toHaveValue('pose_default')
     await user.click(characterCombobox)
     expect(characterCombobox).toHaveValue('')
-    expect(searchableOptions()).toHaveLength(3)
+    expect(searchableOptions()).toHaveLength(2)
     await user.keyboard('{Escape}')
     await user.click(animationCombobox)
     expect(animationCombobox).toHaveValue('')

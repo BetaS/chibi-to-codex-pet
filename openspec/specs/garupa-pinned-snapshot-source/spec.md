@@ -37,16 +37,21 @@ Provider resolver는 manifest가 고정한 HTTPS origin, repository와 full comm
 
 ### Requirement: 고정 캐릭터와 모델 이중 catalog
 
-Pinned source UI는 사용자가 명시적으로 캐릭터 목록 불러오기를 실행한 generation에서만 manifest에 고정된 `_info.json`과 `characters.all.5.json`을 size·SHA-256 검증과 함께 요청해야 한다(MUST). 시스템은 `_info.json`에 실제 buildData가 존재하는 bundle만 model option으로 만들고(MUST), character metadata의 `sdAssetBundleName`을 locale별 `characterName`과 조인해야 한다(MUST). UI는 고유 캐릭터를 첫 번째 searchable combobox로 표시하고, 선택된 캐릭터에 귀속된 bundle만 두 번째 model combobox에 표시해야 한다(MUST). Exact character가 하나로 결정되지 않는 공유 bundle은 이름을 추측해서는 안 되고(MUST NOT), exact 후보가 없을 때 underscore 앞 base bundle이 정확히 한 primary character로 결정되는 경우에만 같은 이름을 상속할 수 있다(MAY). 이름이 모호하거나 없는 bundle은 별도 미매핑 character group에서 원본 bundle ID로 검색·선택할 수 있어야 한다(MUST).
+Pinned source UI는 사용자가 명시적으로 캐릭터 목록 불러오기를 실행한 generation에서만 manifest에 고정된 `_info.json`과 `characters.all.5.json`을 size·SHA-256 검증과 함께 요청해야 한다(MUST). 시스템은 `_info.json`에 실제 buildData가 존재하는 bundle만 model option으로 만들고(MUST), character metadata의 `sdAssetBundleName`을 locale별 `characterName`과 조인해야 한다(MUST). 시스템은 provider metadata에서 `characterType === "unique"`인 항목을 고유 캐릭터로, 하나 이상의 후보가 모두 non-`unique`인 항목을 Mob으로 분류해야 한다(MUST). UI는 고유 캐릭터와 하나의 `Mob` group을 첫 번째 searchable combobox로 표시하고, 선택된 group에 귀속된 bundle만 두 번째 model combobox에 원본 bundle ID로 표시해야 한다(MUST). Exact character가 하나로 결정되지 않는 공유 bundle은 이름을 추측해서는 안 되고(MUST NOT), 후보가 모두 non-`unique`라면 개별 이름 없이 단일 `Mob` group에 포함해야 한다(MUST). Exact 후보가 없을 때 underscore 앞 base bundle이 정확히 한 primary character로 결정되는 경우에만 같은 이름을 상속할 수 있다(MAY). 여러 고유 캐릭터가 충돌하거나 이름·종류를 안전하게 결정할 수 없는 bundle은 별도 미매핑 character group에서 원본 bundle ID로 검색·선택할 수 있어야 한다(MUST).
 
 #### Scenario: 대표 캐릭터명 매핑
 - **WHEN** 검증된 catalog에서 bundle `00001`을 표시한다
 - **THEN** 첫 combobox는 현재 locale의 토야마 카스미를 표시하고 두 번째 model combobox에 `00001`을 표시하며 model 선택값은 내부적으로 `00001`을 유지한다
 - **AND** model load가 성공하면 Pet 기본 이름은 `00001 - 토야마 카스미`이고 전체 캐릭터 수평 반전은 꺼진 상태여야 한다
 
+#### Scenario: 단일 Mob group
+- **WHEN** 서로 다른 non-`unique` character ID에 연결된 bundle과 여러 non-`unique` 후보가 공유하는 bundle이 catalog에 함께 존재한다
+- **THEN** 첫 combobox에는 `Mob` option이 정확히 하나만 표시되고 해당 option의 두 번째 combobox에는 모든 원본 bundle ID가 model option으로 표시된다
+- **AND** model 선택과 catalog 재조회 뒤 복원은 선택한 원본 bundle ID와 `Mob` group identity를 유지한다
+
 #### Scenario: 공유 또는 미매핑 bundle
-- **WHEN** 한 bundle이 여러 non-primary character에 연결되거나 character metadata에 대응값이 없다
-- **THEN** option은 임의 character를 선택하지 않고 별도 미매핑 group 안에서 원본 bundle ID로 검색·선택할 수 있다
+- **WHEN** 한 bundle이 여러 고유 캐릭터에 연결되거나 character metadata에 대응값이 없다
+- **THEN** option은 임의 character 또는 Mob을 선택하지 않고 별도 미매핑 group 안에서 원본 bundle ID로 검색·선택할 수 있다
 
 #### Scenario: 명시적 2단계 요청
 - **WHEN** 사용자가 pinned source를 선택했지만 캐릭터 목록 불러오기를 실행하지 않았다
@@ -103,18 +108,6 @@ Provider manifest를 import하거나 source UI를 mount하는 동작은 external
 - **THEN** source는 저장 bundle을 같은 frozen manifest에서 직접 materialize하고 첫 visible frame 뒤 설정을 적용해야 한다
 - **AND** preset option 선택이나 화면 mount만으로는 catalog 또는 model request를 시작해서는 안 된다
 - **AND** 복원 요청 중 `새 세션`을 선택하면 request를 취소하고 stale model을 active preview로 교체해서는 안 된다
-
-### Requirement: 비공개 local debug snapshot
-
-개발 도구는 manifest의 정확한 repository와 commit에서 `sdchara` 및 필요한 selection metadata를 sparse backup하고 대표 canonical ZIP과 acquisition receipt를 생성할 수 있어야 한다(MUST). Backup root는 repository, Git 추적, Vite workspace/public root, `public/assets` symlink와 production build 입력 밖의 OS private application-data directory여야 하며(MUST), 환경 변수로 다른 repository 외부 private fixture root를 선택할 수 있어야 한다(MUST). Tool은 repository 내부 root를 거부하고(MUST), target을 owner-only 권한으로 만들며 commit identity, file size·SHA-256과 source path를 기록해야 한다(MUST). Cookie·token·authorization header를 기록해서는 안 된다(MUST NOT).
-
-#### Scenario: 로컬 debug backup 생성
-- **WHEN** 개발자가 Garupa debug backup 명령을 실행한다
-- **THEN** exact commit의 `sdchara`와 metadata, 대표 canonical ZIP과 receipt가 private fixture root에 생성되고 tracked source와 `public/assets`에는 원본 byte가 없다
-
-#### Scenario: production artifact 검사
-- **WHEN** production web·CLI와 tracked repository artifact를 검사한다
-- **THEN** provider manifest metadata는 허용되지만 local debug snapshot, `.skel`, atlas, PNG, buildData, Unity bundle과 canonical debug ZIP은 포함되지 않는다
 
 ### Requirement: 안정적인 pinned snapshot 오류 계약
 

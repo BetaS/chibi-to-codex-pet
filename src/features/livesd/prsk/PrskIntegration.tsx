@@ -27,13 +27,10 @@ import {
   loadSharedSkeleton,
 } from '../input/sharedSkeleton'
 import {
-  DEVELOPMENT_SKELETON_PATH,
-  loadDevelopmentCharacterPack,
-  loadDevelopmentSharedSkeleton,
-} from './development'
-import {
-  PJSEK_AI_ASSET_BASE_URL,
-  PRSK_CHIBI_VIEWER_CATALOG_URL,
+  findPrskRemoteModelSelection,
+  groupPrskRemoteCharacterModels,
+  prskCharacterUnitSearchTerms,
+  PrskRemoteError,
   prskRemoteCatalogSource,
   prskRemoteResourceSource,
   resolvePrskRemoteProvider,
@@ -43,23 +40,16 @@ import {
   SearchableCombobox,
   type SearchableComboboxOption,
 } from '../ui/SearchableCombobox'
+import { LiveSDFramingControls } from '../ui/LiveSDFramingControls'
 import {
   toPreviewUiNotice,
   type PreviewUiNotice,
 } from '../ui/previewError'
 import {
   LIVE_SD_FRAMING_SCALE_DEFAULT,
-  LIVE_SD_FRAMING_SCALE_MAX,
-  LIVE_SD_FRAMING_SCALE_MIN,
-  LIVE_SD_FRAMING_SCALE_STEP,
 } from '../rendering/framingScale'
 import {
   LIVE_SD_FRAMING_OFFSET_DEFAULT,
-  LIVE_SD_FRAMING_OFFSET_STEP,
-  LIVE_SD_FRAMING_OFFSET_X_MAX,
-  LIVE_SD_FRAMING_OFFSET_X_MIN,
-  LIVE_SD_FRAMING_OFFSET_Y_MAX,
-  LIVE_SD_FRAMING_OFFSET_Y_MIN,
   type LiveSDFramingOffset,
 } from '../rendering/framingOffset'
 import { normalizeLiveSDLookTarget } from '../rendering/lookTarget'
@@ -81,8 +71,6 @@ import type { CodexPetSettingsPresetSource } from '../../codex-pet/settingsPrese
 import { useCodexPetPresetSession } from '../../codex-pet/useCodexPetPresetSession'
 import { toPrskPreviewUiNotice } from './previewError'
 
-const DEVELOPMENT_DEFAULTS_ENABLED =
-  import.meta.env.DEV && import.meta.env.MODE !== 'test'
 const PRSK_DEFAULT_STATE_MIRROR_X = Object.freeze({
   'running-right': true,
   'running-left': false,
@@ -133,29 +121,9 @@ function recipeSourceKey(source: CodexPetRecipeSource | null | undefined): strin
 
 export interface ActiveLiveSDSource {
   readonly atlasBundle: LiveSDAtlasBundle
+  readonly defaultDisplayName?: string
   readonly recipeSource?: CodexPetRecipeSource
   readonly skeletonData: ArrayBuffer
-}
-
-function catalogTargetText(
-  source: PrskResourceSource,
-  baseUrl: string,
-  catalog: PrskRemoteCatalog | null,
-  emptyValue: string,
-): string {
-  if (catalog) {
-    return catalog.requestOrigins.join(' · ')
-  }
-
-  if (source === 'provided') {
-    return `${new URL(PRSK_CHIBI_VIEWER_CATALOG_URL).origin} · ${new URL(PJSEK_AI_ASSET_BASE_URL).origin}`
-  }
-
-  try {
-    return new URL(baseUrl).origin
-  } catch {
-    return baseUrl.trim() || emptyValue
-  }
 }
 
 export function PrskIntegration() {
@@ -206,10 +174,13 @@ export function PrskIntegration() {
   const [catalogPhase, setCatalogPhase] = useState<CatalogPhase>('idle')
   const [catalogError, setCatalogError] =
     useState<PreviewUiNotice | null>(null)
-  const [selectedCharacterId, setSelectedCharacterId] =
+  const [selectedCharacterKey, setSelectedCharacterKey] =
+    useState<string | null>(null)
+  const [selectedModelId, setSelectedModelId] =
     useState<string | null>(null)
   const [remoteModelBusy, setRemoteModelBusy] = useState(false)
   const [characterQueryResetKey, setCharacterQueryResetKey] = useState(0)
+  const [modelQueryResetKey, setModelQueryResetKey] = useState(0)
   const [animationQueryResetKey, setAnimationQueryResetKey] = useState(0)
 
   const [status, setStatus] = useState<AppStatus>({
@@ -229,13 +200,39 @@ export function PrskIntegration() {
   const activePresetSourceKey = recipeSourceKey(activePresetSource)
   const activeSourceKey = recipeSourceKey(activeSource?.recipeSource)
 
+  const characterGroups = useMemo(
+    () => groupPrskRemoteCharacterModels(
+      remoteCatalog?.characters ?? [],
+      locale,
+    ),
+    [locale, remoteCatalog],
+  )
   const characterOptions = useMemo<readonly SearchableComboboxOption[]>(
     () =>
-      remoteCatalog?.characters.map(({ id, label }) => ({
+      characterGroups.map(({ key, label, section }) => ({
+        group: {
+          key: section.key,
+          label: section.label,
+          searchTerms: prskCharacterUnitSearchTerms(section.key),
+        },
+        label,
+        value: key,
+      })),
+    [characterGroups],
+  )
+  const selectedCharacterGroup = useMemo(
+    () => characterGroups.find(
+      (group) => group.key === selectedCharacterKey,
+    ) ?? null,
+    [characterGroups, selectedCharacterKey],
+  )
+  const modelOptions = useMemo<readonly SearchableComboboxOption[]>(
+    () =>
+      selectedCharacterGroup?.models.map(({ id, label }) => ({
         label,
         value: id,
       })) ?? [],
-    [remoteCatalog],
+    [selectedCharacterGroup],
   )
   const animationOptions = useMemo<readonly SearchableComboboxOption[]>(
     () =>
@@ -244,12 +241,6 @@ export function PrskIntegration() {
         value: animation,
       })) ?? [],
     [preview],
-  )
-  const remoteTargetText = catalogTargetText(
-    resourceSource,
-    remoteBaseUrl,
-    remoteCatalog,
-    t('prsk.remoteTargetPlaceholder'),
   )
   const localizedError = error
     ? localizeErrorNotice(locale, t, error)
@@ -280,11 +271,13 @@ export function PrskIntegration() {
     modelGenerationRef.current += 1
     previewGenerationRef.current += 1
     setRemoteCatalog(null)
-    setSelectedCharacterId(null)
+    setSelectedCharacterKey(null)
+    setSelectedModelId(null)
     setCatalogPhase('idle')
     setCatalogError(null)
     setRemoteModelBusy(false)
     setCharacterQueryResetKey((key) => key + 1)
+    setModelQueryResetKey((key) => key + 1)
   }, [abortRemoteRequests])
 
   const activateSession = useCallback((
@@ -431,7 +424,7 @@ export function PrskIntegration() {
     selectedSkeleton: File | null,
   ) => {
     const canvas = canvasRef.current
-    if (!canvas) {
+    if (!canvas || !selectedArchive || !selectedSkeleton) {
       return
     }
 
@@ -444,20 +437,13 @@ export function PrskIntegration() {
     setError(null)
     setStatus({
       phase: 'importing',
-      messageKey: selectedArchive
-        ? 'prsk.status.inspectArchive'
-        : 'prsk.status.readDevelopmentCharacter',
+      messageKey: 'prsk.status.inspectArchive',
     })
 
     try {
-      let atlasBundle
-      if (selectedArchive) {
-        atlasBundle = await prskCharacterArchiveImporter.import(selectedArchive)
-      } else if (import.meta.env.DEV && import.meta.env.MODE !== 'test') {
-        atlasBundle = await loadDevelopmentCharacterPack()
-      } else {
-        throw new Error('Production local preview requires an archive file.')
-      }
+      const atlasBundle = await prskCharacterArchiveImporter.import(
+        selectedArchive,
+      )
 
       if (
         !mountedRef.current ||
@@ -470,12 +456,7 @@ export function PrskIntegration() {
         phase: 'importing',
         messageKey: 'prsk.status.inspectSkeleton',
       })
-      const skeletonData = await loadSharedSkeleton(
-        selectedSkeleton,
-        DEVELOPMENT_DEFAULTS_ENABLED
-          ? { fallback: () => loadDevelopmentSharedSkeleton() }
-          : {},
-      )
+      const skeletonData = await loadSharedSkeleton(selectedSkeleton)
       liveSD36Adapter.inspectSkeleton(skeletonData)
 
       if (
@@ -533,10 +514,12 @@ export function PrskIntegration() {
     setLocalBusy(false)
     setRemoteModelBusy(false)
     setRemoteCatalog(null)
-    setSelectedCharacterId(null)
+    setSelectedCharacterKey(null)
+    setSelectedModelId(null)
     setCatalogPhase('idle')
     setCatalogError(null)
     setCharacterQueryResetKey((key) => key + 1)
+    setModelQueryResetKey((key) => key + 1)
     setAnimationQueryResetKey((key) => key + 1)
     setError(null)
     setStatus({
@@ -584,7 +567,8 @@ export function PrskIntegration() {
       return
     }
 
-    const selectedCharacterBeforeReload = selectedCharacterId
+    const selectedCharacterBeforeReload = selectedCharacterKey
+    const selectedModelBeforeReload = selectedModelId
     catalogRequestRef.current?.abort()
     modelRequestRef.current?.abort()
     modelRequestRef.current = null
@@ -595,11 +579,13 @@ export function PrskIntegration() {
     modelGenerationRef.current += 1
     previewGenerationRef.current += 1
     setRemoteCatalog(null)
-    setSelectedCharacterId(null)
+    setSelectedCharacterKey(null)
+    setSelectedModelId(null)
     setRemoteModelBusy(false)
     setCatalogPhase('loading')
     setCatalogError(null)
     setCharacterQueryResetKey((key) => key + 1)
+    setModelQueryResetKey((key) => key + 1)
     setError(null)
     setStatus({
       phase: 'loading',
@@ -619,20 +605,32 @@ export function PrskIntegration() {
         return
       }
 
-      setRemoteCatalog(catalog)
-      setSelectedCharacterId(
-        selectedCharacterBeforeReload &&
-          catalog.characters.some(
-            (option) => option.id === selectedCharacterBeforeReload,
-          )
-          ? selectedCharacterBeforeReload
-          : null,
+      const nextCharacterGroups = groupPrskRemoteCharacterModels(
+        catalog.characters,
+        locale,
       )
+      const retainedModelSelection = selectedModelBeforeReload
+        ? findPrskRemoteModelSelection(
+            nextCharacterGroups,
+            selectedModelBeforeReload,
+          )
+        : null
+      const retainedCharacterKey = retainedModelSelection?.character.key ?? (
+        selectedCharacterBeforeReload && nextCharacterGroups.some(
+          (group) => group.key === selectedCharacterBeforeReload,
+        )
+          ? selectedCharacterBeforeReload
+          : null
+      )
+
+      setRemoteCatalog(catalog)
+      setSelectedCharacterKey(retainedCharacterKey)
+      setSelectedModelId(retainedModelSelection?.model.id ?? null)
       setCatalogPhase('ready')
       setStatus({
         phase: sessionRef.current ? 'ready' : 'idle',
         messageKey: 'prsk.status.catalogReady',
-        values: { count: catalog.characters.length },
+        values: { count: nextCharacterGroups.length },
       })
     } catch (caughtError) {
       if (
@@ -658,10 +656,46 @@ export function PrskIntegration() {
     }
   }
 
-  const loadRemoteCharacter = useCallback(async (characterId: string) => {
+  const selectRemoteCharacter = useCallback((characterKey: string) => {
+    if (!characterGroups.some((group) => group.key === characterKey)) {
+      const notice = toNotice(new PrskRemoteError(
+        'REMOTE_SELECTION_INVALID',
+        'The selected character is not present in the current catalog.',
+        { resource: 'catalog' },
+      ))
+      setError(notice)
+      setStatus({ phase: 'error', messageKey: 'prsk.status.error' })
+      return
+    }
+
+    modelRequestRef.current?.abort()
+    modelRequestRef.current = null
+    modelGenerationRef.current += 1
+    previewGenerationRef.current += 1
+    setSelectedCharacterKey(characterKey)
+    setSelectedModelId(null)
+    setRemoteModelBusy(false)
+    setModelQueryResetKey((key) => key + 1)
+    setError(null)
+  }, [characterGroups, toNotice])
+
+  const loadRemoteModel = useCallback(async (modelId: string) => {
     const canvas = canvasRef.current
     const catalog = remoteCatalog
     if (!canvas || !catalog || resourceSource === 'upload') {
+      return
+    }
+    const modelChoice = selectedCharacterGroup?.models.find(
+      (model) => model.id === modelId,
+    )
+    if (!modelChoice) {
+      const notice = toNotice(new PrskRemoteError(
+        'REMOTE_SELECTION_INVALID',
+        'The selected model does not belong to the current character.',
+        { resource: 'catalog' },
+      ))
+      setError(notice)
+      setStatus({ phase: 'error', messageKey: 'prsk.status.error' })
       return
     }
 
@@ -672,18 +706,19 @@ export function PrskIntegration() {
     modelGenerationRef.current = modelGeneration
     const operationGeneration = previewGenerationRef.current + 1
     previewGenerationRef.current = operationGeneration
+    setSelectedModelId(modelId)
     setRemoteModelBusy(true)
     setError(null)
     setStatus({
       phase: 'loading',
       messageKey: 'prsk.status.loadModel',
-      values: { character: characterId },
+      values: { character: modelChoice.label },
     })
 
     try {
       const input = await prskRemoteResourceSource.load({
         catalog,
-        characterId,
+        characterId: modelId,
         signal: controller.signal,
       })
       if (
@@ -699,7 +734,7 @@ export function PrskIntegration() {
       setStatus({
         phase: 'loading',
         messageKey: 'prsk.status.parseSkeleton',
-        values: { character: characterId },
+        values: { character: modelChoice.label },
       })
       const nextSession = await liveSD36Adapter.createPreview({
         atlasBundle: input.atlasBundle,
@@ -710,25 +745,27 @@ export function PrskIntegration() {
         resourceSource === 'provided'
           ? {
               provider: 'prsk-chibi-viewer',
-              characterId,
+              characterId: modelId,
             }
           : {
               provider: 'custom',
               assetBaseUrl: catalog.assetBaseUrl,
-              characterId,
+              characterId: modelId,
             }
       const activated = activateSession(
         nextSession,
         {
           atlasBundle: input.atlasBundle,
+          defaultDisplayName: modelChoice.defaultDisplayName,
           recipeSource,
           skeletonData: input.skeletonData,
         },
         operationGeneration,
       )
       if (activated) {
-        setSelectedCharacterId(characterId)
+        setSelectedModelId(modelId)
         setCharacterQueryResetKey((key) => key + 1)
+        setModelQueryResetKey((key) => key + 1)
       }
     } catch (caughtError) {
       if (
@@ -754,7 +791,13 @@ export function PrskIntegration() {
         setRemoteModelBusy(false)
       }
     }
-  }, [activateSession, remoteCatalog, resourceSource, toNotice])
+  }, [
+    activateSession,
+    remoteCatalog,
+    resourceSource,
+    selectedCharacterGroup,
+    toNotice,
+  ])
 
   const loadPresetRemoteSource = useCallback(async (
     recipeSource: PrskRecipeSource,
@@ -800,11 +843,13 @@ export function PrskIntegration() {
       recipeSource.provider === 'custom' ? recipeSource.assetBaseUrl : '',
     )
     setRemoteCatalog(null)
-    setSelectedCharacterId(null)
+    setSelectedCharacterKey(null)
+    setSelectedModelId(null)
     setCatalogPhase('loading')
     setCatalogError(null)
     setRemoteModelBusy(false)
     setCharacterQueryResetKey((key) => key + 1)
+    setModelQueryResetKey((key) => key + 1)
     setError(null)
     setStatus({ phase: 'loading', messageKey: 'prsk.status.loadCatalog' })
 
@@ -827,14 +872,22 @@ export function PrskIntegration() {
       if (catalogRequestRef.current === catalogController) {
         catalogRequestRef.current = null
       }
+      const presetSelection = findPrskRemoteModelSelection(
+        groupPrskRemoteCharacterModels(catalog.characters, locale),
+        recipeSource.characterId,
+      )
       setRemoteCatalog(catalog)
-      setSelectedCharacterId(recipeSource.characterId)
+      setSelectedCharacterKey(presetSelection?.character.key ?? null)
+      setSelectedModelId(presetSelection?.model.id ?? null)
       setCatalogPhase('ready')
       setCharacterQueryResetKey((key) => key + 1)
+      setModelQueryResetKey((key) => key + 1)
       setStatus({
         phase: 'loading',
         messageKey: 'prsk.status.loadModel',
-        values: { character: recipeSource.characterId },
+        values: {
+          character: presetSelection?.model.label ?? recipeSource.characterId,
+        },
       })
 
       modelController = new AbortController()
@@ -842,6 +895,13 @@ export function PrskIntegration() {
       modelGeneration = modelGenerationRef.current + 1
       modelGenerationRef.current = modelGeneration
       setRemoteModelBusy(true)
+      if (!presetSelection) {
+        throw new PrskRemoteError(
+          'REMOTE_SELECTION_INVALID',
+          'The saved model is not present in the current catalog.',
+          { resource: 'catalog' },
+        )
+      }
       const input = await prskRemoteResourceSource.load({
         catalog,
         characterId: recipeSource.characterId,
@@ -860,7 +920,7 @@ export function PrskIntegration() {
       setStatus({
         phase: 'loading',
         messageKey: 'prsk.status.parseSkeleton',
-        values: { character: recipeSource.characterId },
+        values: { character: presetSelection.model.label },
       })
       const nextSession = await liveSD36Adapter.createPreview({
         atlasBundle: input.atlasBundle,
@@ -871,14 +931,17 @@ export function PrskIntegration() {
         nextSession,
         {
           atlasBundle: input.atlasBundle,
+          defaultDisplayName: presetSelection.model.defaultDisplayName,
           recipeSource,
           skeletonData: input.skeletonData,
         },
         operationGeneration,
       )
       if (activated) {
-        setSelectedCharacterId(recipeSource.characterId)
+        setSelectedCharacterKey(presetSelection.character.key)
+        setSelectedModelId(presetSelection.model.id)
         setCharacterQueryResetKey((key) => key + 1)
+        setModelQueryResetKey((key) => key + 1)
       }
     } catch (caughtError) {
       if (
@@ -910,7 +973,7 @@ export function PrskIntegration() {
         setRemoteModelBusy(false)
       }
     }
-  }, [abortRemoteRequests, activateSession, toNotice])
+  }, [abortRemoteRequests, activateSession, locale, toNotice])
 
   useEffect(() => {
     if (
@@ -949,7 +1012,12 @@ export function PrskIntegration() {
   }, [abortRemoteRequests, presetSession, remoteCatalog])
 
   const handleLocalPreview = () => {
-    if (localBusy || resourceSource !== 'upload') {
+    if (
+      localBusy ||
+      resourceSource !== 'upload' ||
+      !archiveFile ||
+      !skeletonFile
+    ) {
       return
     }
 
@@ -1156,8 +1224,6 @@ export function PrskIntegration() {
     updateFramingOffset(LIVE_SD_FRAMING_OFFSET_DEFAULT)
   }
 
-  const framingScalePercent = Math.round(framingScale * 100)
-
   return (
     <>
       <div className="workspace-grid">
@@ -1232,15 +1298,10 @@ export function PrskIntegration() {
                   <span>
                     {skeletonFile
                       ? t('prsk.fileSelected')
-                      : DEVELOPMENT_DEFAULTS_ENABLED
-                        ? t('prsk.defaultLink')
-                        : t('prsk.selectSkel')}
+                      : t('prsk.selectSkel')}
                   </span>
                   <strong>
-                    {skeletonFile?.name ??
-                      (DEVELOPMENT_DEFAULTS_ENABLED
-                        ? 'base_model/sekai_skeleton.skel'
-                        : t('prsk.sharedSkeletonFile'))}
+                    {skeletonFile?.name ?? t('prsk.sharedSkeletonFile')}
                   </strong>
                   <input
                     accept=".skel,application/octet-stream"
@@ -1248,13 +1309,6 @@ export function PrskIntegration() {
                     type="file"
                   />
                 </label>
-                {DEVELOPMENT_DEFAULTS_ENABLED && !skeletonFile ? (
-                  <p className="input-hint">
-                    {t('prsk.developmentSkeletonHint', {
-                      path: DEVELOPMENT_SKELETON_PATH,
-                    })}
-                  </p>
-                ) : null}
               </section>
 
               <section className="panel-section">
@@ -1269,15 +1323,10 @@ export function PrskIntegration() {
                   <span>
                     {archiveFile
                       ? t('prsk.fileSelected')
-                      : DEVELOPMENT_DEFAULTS_ENABLED
-                        ? t('prsk.defaultLink')
-                        : t('prsk.selectZip')}
+                      : t('prsk.selectZip')}
                   </span>
                   <strong>
-                    {archiveFile?.name ??
-                      (DEVELOPMENT_DEFAULTS_ENABLED
-                        ? t('prsk.defaultCharacterFiles')
-                        : t('prsk.characterArchive'))}
+                    {archiveFile?.name ?? t('prsk.characterArchive')}
                   </strong>
                   <input
                     accept=".zip,application/zip"
@@ -1286,19 +1335,13 @@ export function PrskIntegration() {
                   />
                 </label>
                 <p className="input-hint">
-                  {DEVELOPMENT_DEFAULTS_ENABLED && !archiveFile
-                    ? t('prsk.developmentArchiveHint')
-                    : t('prsk.archiveLimits')}
+                  {t('prsk.archiveLimits')}
                 </p>
               </section>
 
               <button
                 className="primary-action"
-                disabled={
-                  ((!archiveFile || !skeletonFile) &&
-                    !DEVELOPMENT_DEFAULTS_ENABLED) ||
-                  localBusy
-                }
+                disabled={!archiveFile || !skeletonFile || localBusy}
                 onClick={handleLocalPreview}
                 type="button"
               >
@@ -1336,6 +1379,7 @@ export function PrskIntegration() {
                 <div className="remote-actions">
                   <button
                     className="primary-action primary-action--compact"
+                    data-provider-capability="catalog-load"
                     disabled={
                       presetSession.selectedPresetName !== null ||
                       catalogPhase === 'loading' ||
@@ -1352,10 +1396,6 @@ export function PrskIntegration() {
                     {t('prsk.loadingResourceList')}
                   </p>
                 ) : null}
-                <p className="remote-origin">
-                  <strong>{t('prsk.requestTargets')}</strong>
-                  <code>{remoteTargetText}</code>
-                </p>
                 <div className="notice notice--warning remote-disclosure">
                   <p>
                     {t('prsk.remoteDisclosure')}
@@ -1381,13 +1421,30 @@ export function PrskIntegration() {
                   label={t('prsk.characterSearch')}
                   loading={catalogPhase === 'loading'}
                   loadingMessage={t('prsk.loadingRemoteCatalog')}
-                  onChange={(characterId) => {
-                    void loadRemoteCharacter(characterId)
-                  }}
+                  onChange={selectRemoteCharacter}
                   options={characterOptions}
                   placeholder={t('prsk.characterSearchPlaceholder')}
+                  providerCapability="character-selection"
                   queryResetKey={characterQueryResetKey}
-                  value={selectedCharacterId}
+                  value={selectedCharacterKey}
+                />
+                <SearchableCombobox
+                  className="model-combobox"
+                  disabled={
+                    catalogPhase !== 'ready' || !selectedCharacterGroup
+                  }
+                  disabledMessage={t('prsk.selectCharacterFirst')}
+                  emptyMessage={t('prsk.noModels')}
+                  id="remote-model"
+                  label={t('prsk.modelSearch')}
+                  onChange={(modelId) => {
+                    void loadRemoteModel(modelId)
+                  }}
+                  options={modelOptions}
+                  placeholder={t('prsk.modelSearchPlaceholder')}
+                  providerCapability="model-selection"
+                  queryResetKey={modelQueryResetKey}
+                  value={selectedModelId}
                 />
                 {remoteModelBusy ? (
                   <p className="input-hint" aria-live="polite">
@@ -1431,93 +1488,14 @@ export function PrskIntegration() {
               </h2>
             </div>
             <div className="preview-toolbar__controls">
-              <fieldset
-                className="framing-scale-control"
+              <LiveSDFramingControls
                 disabled={!preview}
-              >
-                <legend>{t('prsk.framing')}</legend>
-                <div className="framing-scale-control__input-row">
-                  <label htmlFor="pet-framing-scale">{t('prsk.petSize')}</label>
-                  <input
-                    aria-label={t('prsk.petSizeSlider')}
-                    aria-valuetext={t('common.percentValue', {
-                      value: framingScalePercent,
-                    })}
-                    id="pet-framing-scale"
-                    max={LIVE_SD_FRAMING_SCALE_MAX * 100}
-                    min={LIVE_SD_FRAMING_SCALE_MIN * 100}
-                    onChange={(event) =>
-                      updateFramingScale(Number(event.target.value) / 100)
-                    }
-                    step={LIVE_SD_FRAMING_SCALE_STEP * 100}
-                    type="range"
-                    value={framingScalePercent}
-                  />
-                  <output htmlFor="pet-framing-scale">
-                    {framingScalePercent}%
-                  </output>
-                </div>
-                <div className="framing-scale-control__input-row">
-                  <label htmlFor="pet-framing-offset-x">{t('prsk.offsetX')}</label>
-                  <input
-                    aria-label={t('prsk.offsetXSlider')}
-                    aria-valuetext={t('common.pixelValue', {
-                      value: framingOffset.x,
-                    })}
-                    id="pet-framing-offset-x"
-                    max={LIVE_SD_FRAMING_OFFSET_X_MAX}
-                    min={LIVE_SD_FRAMING_OFFSET_X_MIN}
-                    onChange={(event) =>
-                      updateFramingOffset({
-                        ...framingOffset,
-                        x: Number(event.target.value),
-                      })
-                    }
-                    step={LIVE_SD_FRAMING_OFFSET_STEP}
-                    type="range"
-                    value={framingOffset.x}
-                  />
-                  <output htmlFor="pet-framing-offset-x">
-                    {t('common.pixelValue', { value: framingOffset.x })}
-                  </output>
-                </div>
-                <div className="framing-scale-control__input-row">
-                  <label htmlFor="pet-framing-offset-y">{t('prsk.offsetY')}</label>
-                  <input
-                    aria-label={t('prsk.offsetYSlider')}
-                    aria-valuetext={t('common.pixelValue', {
-                      value: framingOffset.y,
-                    })}
-                    id="pet-framing-offset-y"
-                    max={LIVE_SD_FRAMING_OFFSET_Y_MAX}
-                    min={LIVE_SD_FRAMING_OFFSET_Y_MIN}
-                    onChange={(event) =>
-                      updateFramingOffset({
-                        ...framingOffset,
-                        y: Number(event.target.value),
-                      })
-                    }
-                    step={LIVE_SD_FRAMING_OFFSET_STEP}
-                    type="range"
-                    value={framingOffset.y}
-                  />
-                  <output htmlFor="pet-framing-offset-y">
-                    {t('common.pixelValue', { value: framingOffset.y })}
-                  </output>
-                </div>
-                <button
-                  disabled={
-                    !preview ||
-                    (framingScale === LIVE_SD_FRAMING_SCALE_DEFAULT &&
-                      framingOffset.x === LIVE_SD_FRAMING_OFFSET_DEFAULT.x &&
-                      framingOffset.y === LIVE_SD_FRAMING_OFFSET_DEFAULT.y)
-                  }
-                  onClick={resetFraming}
-                  type="button"
-                >
-                  {t('prsk.resetFraming')}
-                </button>
-              </fieldset>
+                framingOffset={framingOffset}
+                framingScale={framingScale}
+                onOffsetChange={updateFramingOffset}
+                onReset={resetFraming}
+                onScaleChange={updateFramingScale}
+              />
               <div className="animation-picker">
                 <SearchableCombobox
                   disabled={!preview}
@@ -1528,6 +1506,7 @@ export function PrskIntegration() {
                   onChange={playDirectAnimation}
                   options={animationOptions}
                   placeholder={t('prsk.animationSearch')}
+                  providerCapability="animation-selection"
                   queryResetKey={animationQueryResetKey}
                   value={preview?.currentAnimation ?? null}
                 />
@@ -1553,6 +1532,7 @@ export function PrskIntegration() {
               <span className="preview-border-label">{t('prsk.outputFrame')}</span>
               <canvas
                 aria-label={t('prsk.canvasLabel')}
+                data-provider-capability="preview"
                 onPointerCancel={clearPreviewLookTarget}
                 onPointerLeave={clearPreviewLookTarget}
                 onPointerMove={handlePreviewPointerMove}
