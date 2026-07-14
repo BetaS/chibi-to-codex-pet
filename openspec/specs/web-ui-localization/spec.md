@@ -51,7 +51,7 @@ browser UI는 canonical locale `ko`, `en`, `ja`, `zh-CN`을 지원해야 한다(
 - **AND** 일본어 항목만 현재 선택 상태여야 한다
 
 ### Requirement: 전체 browser UI 번역 완전성
-앱 shell, 게임 탭, resource selector, local/remote 가져오기, catalog·animation combobox, LiveSD preview, framing border·scale·X/Y offset, preset selector·새 세션, Codex Pet 상태별 searchable animation mapping·상태 바로가기·package·installed preview, footer의 visible text, form label, placeholder, tooltip, empty/loading/progress/error 문구와 ARIA 이름은 현재 locale의 catalog에서 렌더링되어야 한다(MUST). 네 catalog는 동일한 canonical key 집합을 가져야 하며(MUST), 개발자가 한 locale에만 browser-visible key를 추가할 수 없어야 한다(MUST NOT). 상태 바로가기의 glyph는 locale과 무관한 장식 icon으로 유지하고(MUST), accessible name과 tooltip에는 현재 locale의 상태명을 사용해야 한다(MUST).
+앱 shell, 게임 탭, resource selector, local/remote 가져오기, catalog·animation combobox, LiveSD preview, framing border·scale·X/Y offset, preset selector·새 세션·프리셋 불러오기, Codex Pet 상태별 searchable animation mapping·상태 바로가기·package·installed preview·CLI 바로가기 복사, footer의 visible text, form label, placeholder, tooltip, empty/loading/progress/error 문구와 ARIA 이름은 현재 locale의 catalog에서 렌더링되어야 한다(MUST). 네 catalog는 동일한 canonical key 집합을 가져야 하며(MUST), 개발자가 한 locale에만 browser-visible key를 추가할 수 없어야 한다(MUST NOT). 상태 바로가기의 glyph는 locale과 무관한 장식 icon으로 유지하고(MUST), accessible name과 tooltip에는 현재 locale의 상태명을 사용해야 한다(MUST).
 
 Runtime lookup은 현재 locale에 key가 없을 때 같은 key의 영어 값을 최종 fallback으로 사용해야 하며(MUST), named placeholder는 전달된 값만 치환하고 누락된 placeholder token은 진단할 수 있도록 원문 `{name}` 형태로 유지해야 한다(MUST). Catalog 완전성 검사는 정상 build에서 이 fallback에 의존하는 누락 key가 없도록 보장해야 한다(MUST).
 
@@ -76,6 +76,25 @@ Runtime lookup은 현재 locale에 key가 없을 때 같은 key의 영어 값을
 - **WHEN** catalog loading, model loading, sampling 또는 오류 상태 중 locale을 변경한다
 - **THEN** 현재 상태 문구는 새 locale로 즉시 다시 렌더링되어야 한다
 - **AND** 이전 locale로 미리 format한 상태 문장이 남아서는 안 된다
+
+### Requirement: 사용자 행동과 결과 중심의 안내 문구
+일반 사용자가 보는 helper description, empty state, loading·progress와 복구 안내는 한두 개의 짧은 문장으로 다음에 할 행동 또는 그 행동으로 얻는 결과를 설명해야 한다(MUST). 이 문구는 request generation, ready source, parser·sampler·pixel validation, 내부 frame 수, exact commit, provider manifest와 `public/assets` 같은 구현 경로를 설명해서는 안 된다(MUST NOT). 단, 사용자가 올바른 입력을 선택하거나 문제를 해결하는 데 필요한 파일 확장자·ZIP 내용·서버 URL·browser 호환성·privacy 영향과 별도 진단 영역의 stable code는 표시할 수 있다(MAY).
+
+PRSK, STRR와 Garupa의 preset selector 아래 설명은 각 locale에서 `재사용할 프리셋을 선택해주세요.`와 같은 의미의 짧은 선택 안내여야 한다(MUST). Preset 설명에서 저장 preset의 명시적 적용 gate와 `새 세션`의 character list gate를 풀어 설명해서는 안 되며(MUST NOT), 실제 활성·비활성 상태와 action label이 그 동작을 전달해야 한다(MUST).
+
+#### Scenario: 저장 preset 선택 안내
+- **WHEN** PRSK, STRR 또는 Garupa의 preset selector가 표시된다
+- **THEN** 설명은 재사용할 preset 선택을 안내하고 `프리셋 불러오기`와 `새 세션`의 내부 동작 규칙을 서술하지 않아야 한다
+
+#### Scenario: 모델과 Pet 생성 진행 안내
+- **WHEN** model preview 또는 Codex Pet 생성이 진행 중이다
+- **THEN** 상태 문구는 캐릭터, 미리보기, 애니메이션 또는 설치 파일을 준비 중이라는 사용자 결과를 표시해야 한다
+- **AND** request 취소 구현, skeleton parse, sampling frame 수, package pixel validation 같은 내부 단계를 표시해서는 안 된다
+
+#### Scenario: 입력 제약과 복구 안내
+- **WHEN** local character ZIP 입력 또는 복구 가능한 loading 오류를 안내한다
+- **THEN** 올바른 파일 선택이나 다시 시도 같은 구체적인 다음 행동을 제공해야 한다
+- **AND** 입력 판단에 필요한 `.skel`, ZIP 내부 filename 또는 server URL은 숨기지 않아도 된다
 
 ### Requirement: 기술 식별자와 안전한 오류 번역
 locale 전환은 animation 이름, game/source/character ID, stable error code, runtime version, 파일명·path, URL/origin, recipe, manifest와 install command를 변경해서는 안 된다(MUST NOT). 알려진 browser 오류는 stable code와 현재 locale의 해결 안내를 표시해야 하며(MUST), 알려지지 않은 오류는 raw exception·stack 또는 다른 locale의 원문 대신 현재 locale의 일반 오류로 정규화해야 한다(MUST).

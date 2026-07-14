@@ -131,18 +131,18 @@ var CODEX_PET_STATES = [
 ];
 CODEX_PET_STATES.reduce((total, state) => total + state.frameCount, 0) + 16;
 //#endregion
-//#region src/features/livesd/rendering/framingScale.ts
+//#region ../../src/features/livesd/rendering/framingScale.ts
 var LIVE_SD_FRAMING_SCALE_MIN = .8;
 var LIVE_SD_FRAMING_SCALE_MAX = 1.5;
 //#endregion
-//#region src/features/livesd/rendering/framingOffset.ts
+//#region ../../src/features/livesd/rendering/framingOffset.ts
 var LIVE_SD_FRAMING_OFFSET_Y_MIN = -104;
 var LIVE_SD_FRAMING_OFFSET_DEFAULT = Object.freeze({
 	x: 0,
 	y: 0
 });
 //#endregion
-//#region src/features/codex-pet/lookMovementScale.ts
+//#region ../../src/features/codex-pet/lookMovementScale.ts
 var CODEX_PET_LOOK_MOVEMENT_SCALE_MIN = .5;
 var CODEX_PET_LOOK_MOVEMENT_SCALE_MAX = 1.5;
 var CODEX_PET_RECIPE_KIND = "livesd-recipe";
@@ -170,6 +170,11 @@ var PET_KEYS = [
 	"lookMovementScale"
 ];
 var PRSK_PROVIDER_KEYS = ["characterId", "provider"];
+var STRR_PROVIDER_KEYS = [
+	"characterId",
+	"editionId",
+	"provider"
+];
 var RECIPE_KEYS = [
 	"globalMirrorX",
 	"kind",
@@ -236,12 +241,12 @@ function parseLookMovementScale(value) {
 	if (typeof value !== "number" || !Number.isFinite(value) || value < .5 || value > 1.5) recipeError(`pet.lookMovementScale은 ${CODEX_PET_LOOK_MOVEMENT_SCALE_MIN} 이상 ${CODEX_PET_LOOK_MOVEMENT_SCALE_MAX} 이하의 숫자여야 합니다.`);
 	return Math.round(value * 100) / 100;
 }
-function parseCharacterId(value) {
-	const characterId = parseTrimmedString(value, "source.characterId", 128);
-	if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(characterId)) recipeError("source.characterId는 안전한 원격 캐릭터 ID여야 합니다.");
-	return characterId;
+function parseSourceId(value, field) {
+	const sourceId = parseTrimmedString(value, `source.${field}`, 128);
+	if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(sourceId)) recipeError(`source.${field}는 안전한 원격 ID여야 합니다.`);
+	return sourceId;
 }
-function parseSource(value) {
+function parseCodexPetRecipeSource(value) {
 	const source = assertRecord(value, "source");
 	assertNoForbiddenBinaryKeys(source);
 	const provider = source.provider;
@@ -249,7 +254,7 @@ function parseSource(value) {
 		assertKnownKeys(source, PRSK_PROVIDER_KEYS, "source");
 		return {
 			provider,
-			characterId: parseCharacterId(source.characterId)
+			characterId: parseSourceId(source.characterId, "characterId")
 		};
 	}
 	if (provider === "custom") {
@@ -257,10 +262,22 @@ function parseSource(value) {
 		return {
 			provider,
 			assetBaseUrl: parseTrimmedString(source.assetBaseUrl, "source.assetBaseUrl", 2048),
-			characterId: parseCharacterId(source.characterId)
+			characterId: parseSourceId(source.characterId, "characterId")
 		};
 	}
-	recipeError("source.provider는 custom 또는 prsk-chibi-viewer여야 합니다.");
+	if (provider === "strr-res-pak") {
+		assertKnownKeys(source, STRR_PROVIDER_KEYS, "source");
+		const characterId = parseSourceId(source.characterId, "characterId");
+		const editionId = parseSourceId(source.editionId, "editionId");
+		if (!/^\d{1,8}$/u.test(characterId) || !/^\d{1,16}$/u.test(editionId)) recipeError("STRR source ID는 숫자 식별자여야 합니다.");
+		if (!editionId.startsWith(characterId)) recipeError("STRR edition ID는 character ID로 시작해야 합니다.");
+		return {
+			provider,
+			characterId,
+			editionId
+		};
+	}
+	recipeError("source.provider는 custom, prsk-chibi-viewer 또는 strr-res-pak이어야 합니다.");
 }
 function parsePet(value) {
 	const pet = assertRecord(value, "pet");
@@ -305,7 +322,7 @@ function parseCodexPetRecipe(value) {
 		kind: CODEX_PET_RECIPE_KIND,
 		renderer: CODEX_PET_RECIPE_RENDERER,
 		globalMirrorX: parseOptionalBoolean(recipe.globalMirrorX, "globalMirrorX"),
-		source: parseSource(recipe.source),
+		source: parseCodexPetRecipeSource(recipe.source),
 		pet: parsePet(recipe.pet),
 		mappings: parseMappings(recipe.mappings)
 	};
@@ -339,7 +356,7 @@ function isSafeCodexPetId(value) {
 	return SAFE_PET_ID.test(value);
 }
 //#endregion
-//#region packages/cli/src/cli.ts
+//#region src/cli.ts
 var CLI_VERSION = "0.1.0";
 var PACKAGE_NAME = "chibi-to-codex-pet";
 var BIN_NAME = "chibi-to-codex-pet";

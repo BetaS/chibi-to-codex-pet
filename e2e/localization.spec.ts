@@ -10,7 +10,7 @@ test('미지원 browser locale은 영어로 시작하고 네 국기 selector로 
   await expect(page.locator('html')).toHaveAttribute('lang', 'en')
   await expect(
     page.getByText(
-      'Import game resources directly in your browser and build a Codex custom pet.',
+      'Choose a favorite character and create an installable Codex Pet.',
     ),
   ).toBeVisible()
 

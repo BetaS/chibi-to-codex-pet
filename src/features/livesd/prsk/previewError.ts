@@ -1,6 +1,5 @@
 import type { PreviewUiNotice } from '../ui/previewError'
 import { isPrskArchiveImportError } from './archive'
-import { DevelopmentCharacterAssetError } from './development'
 import { isPrskRemoteError } from './remote'
 
 export function toPrskPreviewUiNotice(
@@ -8,8 +7,7 @@ export function toPrskPreviewUiNotice(
 ): PreviewUiNotice | null {
   if (
     isPrskArchiveImportError(error) ||
-    isPrskRemoteError(error) ||
-    error instanceof DevelopmentCharacterAssetError
+    isPrskRemoteError(error)
   ) {
     const details: Record<string, string | number> = {}
     for (const key of ['path', 'resource', 'status', 'url'] as const) {

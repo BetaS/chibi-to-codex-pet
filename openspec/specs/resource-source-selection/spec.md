@@ -12,7 +12,7 @@
 #### Scenario: 프로세카 초기 resource 상태
 - **WHEN** 사용자가 앱에 처음 진입하고 `프로세카` 탭이 선택된다
 - **THEN** resource source는 `provided`가 선택되어야 한다
-- **AND** UI는 기본 제공 `prsk-chibi-viewer` manifest와 요청 대상 origin을 표시해야 한다
+- **AND** UI는 기본 캐릭터 선택지와 연결할 server를 사용자 관점의 문구로 표시하고 내부 manifest 이름을 일반 설명으로 노출하지 않아야 한다
 - **AND** 초기 primary action은 provided source의 `불러오기`여야 한다
 
 #### Scenario: 게임 탭과 resource 기본값

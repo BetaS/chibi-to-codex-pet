@@ -113,6 +113,16 @@ sampler는 상태 계약의 row와 frame 수에 따라 57개 표준 상태 frame
 - **WHEN** 검증된 눈 rig으로 v2 look frame을 export한다
 - **THEN** rows 9–10은 각각 8개 cell을 모두 사용하고 표준 frame을 포함한 전체 사용 cell 수는 73이다
 
+#### Scenario: source별 static look fallback
+- **WHEN** source가 static look fallback을 명시했고 `eye_scale`, 그 parent 또는 유효한 좌우 눈 attachment 부족으로 look rig 검증이 `LOOK_RIG_MISSING`을 반환한다
+- **THEN** sampler는 `LOOK_RIG_MISSING`으로 중단하지 않고 idle animation의 `time=0` pose를 눈 offset 없이 rows 9–10의 16개 cell에 기록해야 한다
+- **AND** 전체 사용 cell 수 73과 look direction index 계약을 유지해야 한다
+- **AND** fallback을 명시하지 않은 source는 기존 `LOOK_RIG_MISSING` 검증을 유지해야 한다
+
+#### Scenario: static fallback이 숨기지 않는 변환 오류
+- **WHEN** eye rig 검증은 통과했지만 parent matrix가 유한하고 가역적이지 않아 world-to-local 변환이 실패한다
+- **THEN** static fallback 여부와 관계없이 sampler는 해당 변환 오류로 build를 중단해야 한다
+
 #### Scenario: 전체와 상태별 반전 합성
 - **WHEN** 특정 상태에 대해 `globalMirrorX`와 `mirrorX` 조합을 계산한다
 - **THEN** 둘 중 정확히 하나만 활성화된 경우에만 최종 cell을 수평 반전해야 한다

@@ -67,6 +67,7 @@ import type {
   LiveSDFrameSamplingPhase,
   LiveSDFrameSamplingResult,
 } from './types'
+import type { LiveSDLookRigFallback } from '../rendering/lookRigFallback'
 
 const TOTAL_PROGRESS_STEPS =
   CODEX_PET_STANDARD_FRAME_COUNT * 2 + CODEX_PET_TOTAL_FRAME_COUNT + 1
@@ -456,6 +457,7 @@ function applyPlannedFrame(
   frame: LiveSDPlannedFrame,
   projection?: LiveSDFrameProjection,
   lookMovementScale = CODEX_PET_LOOK_MOVEMENT_SCALE_DEFAULT,
+  lookRigFallback?: LiveSDLookRigFallback,
 ): void {
   const animation = session.animations.get(frame.animationName)
   if (!animation) {
@@ -483,24 +485,34 @@ function applyPlannedFrame(
     // Resolve the animated parent transform before converting the screen/world
     // gaze delta. The second update applies the local eye offset to descendants.
     session.skeleton.updateWorldTransform()
-    const eyeBone = validateLiveSDLookRig(session.skeleton)
-    const worldDelta = calculateLiveSDLookWorldDelta(
-      projection,
-      frame.lookDirectionDegrees,
-      LIVE_SD_LOOK_HORIZONTAL_RADIUS_PX * lookMovementScale,
-      LIVE_SD_LOOK_VERTICAL_RADIUS_PX * lookMovementScale,
-    )
-    const localDelta = convertLiveSDWorldDeltaToLocal(
-      {
-        a: eyeBone.parent.a,
-        b: eyeBone.parent.b,
-        c: eyeBone.parent.c,
-        d: eyeBone.parent.d,
-      },
-      worldDelta,
-    )
-    eyeBone.x += localDelta.x
-    eyeBone.y += localDelta.y
+    try {
+      const eyeBone = validateLiveSDLookRig(session.skeleton)
+      const worldDelta = calculateLiveSDLookWorldDelta(
+        projection,
+        frame.lookDirectionDegrees,
+        LIVE_SD_LOOK_HORIZONTAL_RADIUS_PX * lookMovementScale,
+        LIVE_SD_LOOK_VERTICAL_RADIUS_PX * lookMovementScale,
+      )
+      const localDelta = convertLiveSDWorldDeltaToLocal(
+        {
+          a: eyeBone.parent.a,
+          b: eyeBone.parent.b,
+          c: eyeBone.parent.c,
+          d: eyeBone.parent.d,
+        },
+        worldDelta,
+      )
+      eyeBone.x += localDelta.x
+      eyeBone.y += localDelta.y
+    } catch (error) {
+      if (
+        lookRigFallback !== 'static' ||
+        !isLiveSDFrameSamplingError(error) ||
+        error.code !== 'LOOK_RIG_MISSING'
+      ) {
+        throw error
+      }
+    }
   }
   session.skeleton.updateWorldTransform()
 }
@@ -1037,6 +1049,7 @@ export class LiveSD36FrameSampler implements LiveSDFrameSamplerContract {
             frame,
             frameProjection,
             lookMovementScale,
+            input.lookRigFallback,
           )
           drawRuntimeFrame(runtimeSession, gl)
         } catch (error) {

@@ -28,4 +28,15 @@ describe('localized browser errors', () => {
       { code: 'PREVIEW_UNKNOWN_ERROR', message: '내부 비밀 오류' },
     )).toBe('プレビューの準備中に不明なエラーが発生しました。')
   })
+
+  it('한국어에서도 내부 원문 대신 사용자 복구 안내를 쓴다', () => {
+    expect(localizeErrorNotice(
+      'ko',
+      (key, values) => translateMessage('ko', key, values),
+      {
+        code: 'REMOTE_NETWORK_OR_CORS',
+        message: '원격 서버의 CORS 설정과 request generation을 확인하세요.',
+      },
+    )).toBe('서버에 연결하지 못했습니다. 네트워크와 URL을 확인해주세요.')
+  })
 })

@@ -11,6 +11,7 @@ import {
   useI18n,
   type MessageKey,
 } from '../../i18n'
+import { trackPetZipDownload } from '../../analytics/ga4'
 import type { LiveSDAtlasBundle } from '../livesd/model'
 import {
   liveSD36FrameSampler,
@@ -29,6 +30,7 @@ import {
   type CodexPetStateId,
 } from './contract'
 import { CodexPetInstalledPreview } from './CodexPetInstalledPreview'
+import { GitHubStarPrompt } from './GitHubStarPrompt'
 import {
   exportCodexPetPackage,
   type ExportedCodexPetPackage,
@@ -55,6 +57,7 @@ import {
   type LiveSDFramingOffset,
 } from '../livesd/rendering/framingOffset'
 import { LIVE_SD_FRAMING_SCALE_DEFAULT } from '../livesd/rendering/framingScale'
+import type { LiveSDLookRigFallback } from '../livesd/rendering/lookRigFallback'
 import {
   SearchableCombobox,
   type SearchableComboboxOption,
@@ -66,24 +69,33 @@ import {
   selectCodexPetSettingsPreset,
   type CodexPetSettingsPreset,
   type CodexPetSettingsPresetCatalog,
+  type CodexPetSettingsPresetRuntime,
+  type CodexPetSettingsPresetSource,
 } from './settingsPresets'
 
 export interface CodexPetBuilderSource {
   readonly atlasBundle: LiveSDAtlasBundle
+  readonly defaultDisplayName?: string
+  readonly lookRigFallback?: LiveSDLookRigFallback
   readonly skeletonData: ArrayBuffer
 }
 
 export interface CodexPetBuilderServices {
+  readonly copyText: (text: string) => Promise<void>
   readonly sample: LiveSDFrameSamplerContract['sample']
   readonly exportPackage: typeof exportCodexPetPackage
   readonly validatePackage: typeof validateCodexPetPackage
   readonly createObjectUrl: (blob: Blob) => string
   readonly revokeObjectUrl: (url: string) => void
+  readonly trackDownload: () => void
 }
 
 export interface CodexPetBuilderProps {
   readonly animations: readonly string[]
   readonly defaultGlobalMirrorX?: boolean
+  readonly defaultStateAnimationNames?: Readonly<
+    Partial<Record<CodexPetStateId, string>>
+  >
   readonly defaultStateMirrorX?: Readonly<
     Partial<Record<CodexPetStateId, boolean>>
   >
@@ -107,6 +119,9 @@ export interface CodexPetBuilderProps {
   ) => void
   readonly onPreviewLookMovementScaleChange?: (scale: number) => void
   readonly presetCatalog?: CodexPetSettingsPresetCatalog
+  readonly presetLoadGeneration?: number
+  readonly presetRuntime?: CodexPetSettingsPresetRuntime
+  readonly presetSource?: CodexPetSettingsPresetSource | null
   readonly recipeSource?: CodexPetRecipeSource | null
   readonly services?: Partial<CodexPetBuilderServices>
   readonly source: CodexPetBuilderSource | null
@@ -120,6 +135,8 @@ type ExportPhase =
   | 'ready'
   | 'sampling'
   | 'validating'
+
+type InstallCommandCopyPhase = 'copied' | 'copying' | 'error' | 'idle'
 
 interface BuilderResult {
   readonly filename: string
@@ -147,11 +164,18 @@ interface InitialBuilderState {
 }
 
 const DEFAULT_SERVICES: CodexPetBuilderServices = {
+  copyText: async (value) => {
+    if (!navigator.clipboard?.writeText) {
+      throw new Error('Clipboard API is unavailable.')
+    }
+    await navigator.clipboard.writeText(value)
+  },
   sample: (input) => liveSD36FrameSampler.sample(input),
   exportPackage: exportCodexPetPackage,
   validatePackage: validateCodexPetPackage,
   createObjectUrl: (blob) => URL.createObjectURL(blob),
   revokeObjectUrl: (url) => URL.revokeObjectURL(url),
+  trackDownload: trackPetZipDownload,
 }
 
 const PHASE_MESSAGE_KEYS: Readonly<Record<ExportPhase, MessageKey>> = {
@@ -188,15 +212,31 @@ function toBuilderError(error: unknown): BuilderError {
 
 function createDefaultMappings(
   animations: readonly string[],
+  defaultStateAnimationNames?: Readonly<
+    Partial<Record<CodexPetStateId, string>>
+  >,
   defaultStateMirrorX?: Readonly<
     Partial<Record<CodexPetStateId, boolean>>
   >,
 ): CodexPetAnimationMappings {
   const mappings = recommendCodexPetMappings(animations)
   for (const state of CODEX_PET_STATES) {
+    const preferredAnimationName = defaultStateAnimationNames?.[state.id]
+    const animationName = preferredAnimationName
+      ? animations.find((candidate) => candidate === preferredAnimationName) ??
+        animations.find(
+          (candidate) =>
+            candidate.toLocaleLowerCase('en-US') ===
+            preferredAnimationName.toLocaleLowerCase('en-US'),
+        )
+      : undefined
     const mirrorX = defaultStateMirrorX?.[state.id]
-    if (mirrorX !== undefined) {
-      mappings[state.id] = { ...mappings[state.id], mirrorX }
+    if (animationName !== undefined || mirrorX !== undefined) {
+      mappings[state.id] = {
+        ...mappings[state.id],
+        ...(animationName === undefined ? {} : { animationName }),
+        ...(mirrorX === undefined ? {} : { mirrorX }),
+      }
     }
   }
   return mappings
@@ -206,6 +246,9 @@ function createInitialBuilderState(
   source: CodexPetBuilderSource | null,
   animations: readonly string[],
   defaultGlobalMirrorX: boolean,
+  defaultStateAnimationNames?: Readonly<
+    Partial<Record<CodexPetStateId, string>>
+  >,
   defaultStateMirrorX?: Readonly<
     Partial<Record<CodexPetStateId, boolean>>
   >,
@@ -220,7 +263,8 @@ function createInitialBuilderState(
     Object.keys(presetCatalog.presets).length > 0
       ? ''
       : source
-        ? suggestedDisplayName(source.atlasBundle.sourceName)
+        ? source.defaultDisplayName?.trim() ||
+          suggestedDisplayName(source.atlasBundle.sourceName)
         : ''
   const baseState = {
     description: activePreset?.description ?? '',
@@ -243,7 +287,11 @@ function createInitialBuilderState(
   }
 
   try {
-    const mappings = createDefaultMappings(animations, defaultStateMirrorX)
+    const mappings = createDefaultMappings(
+      animations,
+      defaultStateAnimationNames,
+      defaultStateMirrorX,
+    )
     const resolvedMappings = activePreset
       ? applyCodexPetSettingsPresetMappings(
           activePreset,
@@ -284,6 +332,7 @@ function progressText(progress: LiveSDFrameSamplingProgress | null): string {
 function CodexPetBuilderContent({
   animations,
   defaultGlobalMirrorX = false,
+  defaultStateAnimationNames,
   defaultStateMirrorX,
   framingOffset = LIVE_SD_FRAMING_OFFSET_DEFAULT,
   framingScale,
@@ -294,23 +343,29 @@ function CodexPetBuilderContent({
   onPreviewAnimationChange,
   onPreviewLookMovementScaleChange,
   presetCatalog: controlledPresetCatalog,
+  presetLoadGeneration = 0,
+  presetRuntime = 'prsk',
+  presetSource,
   recipeSource,
   services,
   source,
 }: CodexPetBuilderProps) {
   const { locale, t } = useI18n()
   const [initialPresetCatalog] = useState(() =>
-    readCodexPetSettingsPresetCatalog(),
+    readCodexPetSettingsPresetCatalog(undefined, presetRuntime),
   )
   const [uncontrolledPresetCatalog, setUncontrolledPresetCatalog] =
     useState(initialPresetCatalog)
   const presetCatalog =
     controlledPresetCatalog ?? uncontrolledPresetCatalog
+  const resolvedPresetSource =
+    presetSource === undefined ? recipeSource : presetSource
   const [initialState] = useState(() =>
     createInitialBuilderState(
       source,
       animations,
       defaultGlobalMirrorX,
+      defaultStateAnimationNames,
       defaultStateMirrorX,
       controlledPresetCatalog ?? initialPresetCatalog,
     ),
@@ -327,10 +382,15 @@ function CodexPetBuilderContent({
   })
   const generationRef = useRef(0)
   const initialFramingAppliedRef = useRef(false)
-  const appliedPresetNameRef = useRef(presetCatalog.activePresetName)
+  const appliedPresetRef = useRef({
+    generation: presetLoadGeneration,
+    name: presetCatalog.activePresetName,
+  })
   const urlsRef = useRef<Pick<BuilderResult, 'packageUrl' | 'spritesheetUrl'> | null>(
     null,
   )
+  const downloadLinkRef = useRef<HTMLAnchorElement>(null)
+  const starPromptShownRef = useRef(false)
   const [description, setDescription] = useState(initialState.description)
   const [globalMirrorX, setGlobalMirrorX] = useState(
     initialState.globalMirrorX,
@@ -347,6 +407,9 @@ function CodexPetBuilderContent({
     useState<LiveSDFrameSamplingProgress | null>(null)
   const [mappingQueryResetKey, setMappingQueryResetKey] = useState(0)
   const [result, setResult] = useState<BuilderResult | null>(null)
+  const [isStarPromptOpen, setIsStarPromptOpen] = useState(false)
+  const [installCommandCopyPhase, setInstallCommandCopyPhase] =
+    useState<InstallCommandCopyPhase>('idle')
   const animationOptions = useMemo<readonly SearchableComboboxOption[]>(
     () =>
       animations.map((animationName) => ({
@@ -412,6 +475,7 @@ function CodexPetBuilderContent({
       urlsRef.current = null
     }
     setResult(null)
+    setInstallCommandCopyPhase('idle')
   }, [resolvedServices])
 
   useEffect(
@@ -513,6 +577,7 @@ function CodexPetBuilderContent({
       if (source && animations.length > 0) {
         const defaults = createDefaultMappings(
           animations,
+          defaultStateAnimationNames,
           defaultStateMirrorX,
         )
         nextMappings = preset
@@ -564,6 +629,7 @@ function CodexPetBuilderContent({
     animations,
     clearResult,
     defaultGlobalMirrorX,
+    defaultStateAnimationNames,
     defaultStateMirrorX,
     onFramingChange,
     onPreviewAnimationChange,
@@ -572,17 +638,32 @@ function CodexPetBuilderContent({
 
   useEffect(() => {
     const nextPresetName = presetCatalog.activePresetName
-    if (appliedPresetNameRef.current === nextPresetName) {
+    if (
+      appliedPresetRef.current.name === nextPresetName &&
+      appliedPresetRef.current.generation === presetLoadGeneration
+    ) {
       return
     }
-    appliedPresetNameRef.current = nextPresetName
+    appliedPresetRef.current = {
+      generation: presetLoadGeneration,
+      name: nextPresetName,
+    }
     applyPreset(
       nextPresetName ? presetCatalog.presets[nextPresetName] ?? null : null,
     )
-  }, [applyPreset, presetCatalog.activePresetName, presetCatalog.presets])
+  }, [
+    applyPreset,
+    presetCatalog.activePresetName,
+    presetCatalog.presets,
+    presetLoadGeneration,
+  ])
 
   const changeActivePreset = (presetName: string | null) => {
-    const nextCatalog = selectCodexPetSettingsPreset(presetName)
+    const nextCatalog = selectCodexPetSettingsPreset(
+      presetName,
+      undefined,
+      presetRuntime,
+    )
     updatePresetCatalog(nextCatalog)
   }
 
@@ -621,6 +702,7 @@ function CodexPetBuilderContent({
         framingScale: sampledFramingScale,
         globalMirrorX: sampledGlobalMirrorX,
         lookMovementScale: sampledLookMovementScale,
+        lookRigFallback: source.lookRigFallback,
         skeletonData: source.skeletonData,
         mappings: sampledMappings,
         signal: controller.signal,
@@ -696,17 +778,25 @@ function CodexPetBuilderContent({
       setProgress(null)
       setPhase('ready')
       try {
-        const nextCatalog = saveCodexPetSettingsPreset({
-          description,
-          displayName,
-          framingOffset: sampledFramingOffset,
-          framingScale: sampledFramingScale,
-          globalMirrorX: sampledGlobalMirrorX,
-          lookMovementScale: sampledLookMovementScale,
-          mappings: sampledMappings,
-          source: recipeSource ?? null,
-        })
-        appliedPresetNameRef.current = nextCatalog.activePresetName
+        const nextCatalog = saveCodexPetSettingsPreset(
+          {
+            description,
+            displayName,
+            framingOffset: sampledFramingOffset,
+            framingScale: sampledFramingScale,
+            globalMirrorX: sampledGlobalMirrorX,
+            lookMovementScale: sampledLookMovementScale,
+            mappings: sampledMappings,
+            source: resolvedPresetSource ?? null,
+          },
+          undefined,
+          Date.now(),
+          presetRuntime,
+        )
+        appliedPresetRef.current = {
+          generation: presetLoadGeneration,
+          name: nextCatalog.activePresetName,
+        }
         updatePresetCatalog(nextCatalog)
       } catch {
         // Preset validation or persistence must not invalidate a valid package.
@@ -735,8 +825,36 @@ function CodexPetBuilderContent({
     phase === 'sampling' || phase === 'packaging' || phase === 'validating'
   const lookMovementPercent = Math.round(lookMovementScale * 100)
 
+  const closeStarPrompt = useCallback(() => {
+    setIsStarPromptOpen(false)
+  }, [])
+  const handleDownload = useCallback(() => {
+    resolvedServices.trackDownload()
+    if (!starPromptShownRef.current) {
+      starPromptShownRef.current = true
+      setIsStarPromptOpen(true)
+    }
+  }, [resolvedServices])
+
+  const copyInstallCommand = async () => {
+    if (!result?.installCommand || installCommandCopyPhase === 'copying') {
+      return
+    }
+    setInstallCommandCopyPhase('copying')
+    try {
+      await resolvedServices.copyText(result.installCommand)
+      setInstallCommandCopyPhase('copied')
+    } catch {
+      setInstallCommandCopyPhase('error')
+    }
+  }
+
   return (
-    <section className="codex-pet-builder" aria-labelledby="codex-pet-builder-title">
+    <section
+      aria-labelledby="codex-pet-builder-title"
+      className="codex-pet-builder"
+      data-provider-capability="pet-builder"
+    >
       <div className="codex-pet-builder__header">
         <div>
           <p className="eyebrow">{t('builder.eyebrow')}</p>
@@ -763,7 +881,6 @@ function CodexPetBuilderContent({
               </select>
             </label>
           ) : null}
-          <span className="compatibility-badge">v2 · 73 frames · 1536×2288</span>
         </div>
       </div>
 
@@ -803,12 +920,6 @@ function CodexPetBuilderContent({
                 <div className="codex-pet-mapping-row" key={state.id}>
                   <div>
                     <strong>{copy.label}</strong>
-                    <small>
-                      {t('builder.rowFrames', {
-                        row: state.row,
-                        count: state.frameCount,
-                      })}
-                    </small>
                   </div>
                   <SearchableCombobox
                     className="codex-pet-state-animation"
@@ -987,18 +1098,44 @@ function CodexPetBuilderContent({
                   <strong>{result.validated.manifest.displayName}</strong>
                   <code>{result.filename}</code>
                 </div>
-                <a download={result.filename} href={result.packageUrl}>
+                <a
+                  download={result.filename}
+                  href={result.packageUrl}
+                  onClick={handleDownload}
+                  ref={downloadLinkRef}
+                >
                   {t('builder.download')}
                 </a>
                 {result.installCommand ? (
-                  <label className="codex-pet-command">
-                    <span>{t('builder.installCommand')}</span>
-                    <textarea
-                      readOnly
-                      rows={3}
-                      value={result.installCommand}
-                    />
-                  </label>
+                  <div className="codex-pet-command">
+                    <label>
+                      <span>{t('builder.installCommand')}</span>
+                      <textarea
+                        readOnly
+                        rows={3}
+                        value={result.installCommand}
+                      />
+                    </label>
+                    <button
+                      className="secondary-action"
+                      disabled={installCommandCopyPhase === 'copying'}
+                      onClick={() => void copyInstallCommand()}
+                      type="button"
+                    >
+                      {t('builder.copyInstallCommand')}
+                    </button>
+                    <span
+                      aria-live="polite"
+                      className="codex-pet-command__copy-status"
+                      role="status"
+                    >
+                      {installCommandCopyPhase === 'copied'
+                        ? t('builder.installCommandCopied')
+                        : installCommandCopyPhase === 'error'
+                          ? t('builder.installCommandCopyFailed')
+                          : ''}
+                    </span>
+                  </div>
                 ) : null}
               </div>
             ) : null}
@@ -1012,6 +1149,11 @@ function CodexPetBuilderContent({
           ) : null}
         </div>
       )}
+      <GitHubStarPrompt
+        isOpen={isStarPromptOpen}
+        onClose={closeStarPrompt}
+        triggerRef={downloadLinkRef}
+      />
     </section>
   )
 }
@@ -1034,6 +1176,6 @@ function getBuilderSourceKey(source: CodexPetBuilderSource | null): string {
 }
 
 export function CodexPetBuilder(props: CodexPetBuilderProps) {
-  const instanceKey = `${getBuilderSourceKey(props.source)}:${JSON.stringify(props.animations)}:${props.defaultGlobalMirrorX ?? false}:${JSON.stringify(props.defaultStateMirrorX ?? {})}`
+  const instanceKey = `${props.presetRuntime ?? 'prsk'}:${getBuilderSourceKey(props.source)}:${JSON.stringify(props.animations)}:${props.defaultGlobalMirrorX ?? false}:${JSON.stringify(props.defaultStateAnimationNames ?? {})}:${JSON.stringify(props.defaultStateMirrorX ?? {})}`
   return <CodexPetBuilderContent key={instanceKey} {...props} />
 }

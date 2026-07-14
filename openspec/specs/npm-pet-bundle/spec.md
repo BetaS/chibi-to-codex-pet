@@ -14,9 +14,10 @@
 - **WHEN** release check가 CLI workspace에서 actual `npm pack`을 실행한다
 - **THEN** tarball의 package 이름은 `chibi-to-codex-pet`이고 executable bin은 built `dist/cli.js`를 가리킨다
 
-#### Scenario: local npx package spec 검증
-- **WHEN** 다른 PC에서 사용자가 repo를 pull하고 `pnpm verify:local-npx`를 실행한다
-- **THEN** 스크립트는 dependency install, CLI/renderer build, package contents 검사, local npx version, recipe dry-run, 임시 Codex home install과 repeat no-op을 검증한다
+#### Scenario: Workspace package 검증
+- **WHEN** dependency를 설치한 repository에서 CLI/renderer build와 `pnpm --filter chibi-to-codex-pet verify:pack`을 실행한다
+- **THEN** release check는 actual tarball의 executable, dependency, file allowlist와 credential·model signature 비포함을 검증한다
+- **AND** 실제 provider recipe render·install smoke는 package 검증이나 CI의 전제 조건이어서는 안 된다
 
 #### Scenario: Workspace publish 범위
 - **WHEN** root와 workspace package manifest를 검사한다

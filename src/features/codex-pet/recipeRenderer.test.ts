@@ -53,4 +53,41 @@ describe('recipe renderer sampling parity', () => {
       signal: controller.signal,
     })
   })
+
+  it('STRR recipe는 static look fallback과 고정 mirror 식별자를 전달한다', () => {
+    const mappings = Object.fromEntries(
+      CODEX_PET_STATES.map((state) => [
+        state.id,
+        { animationName: 'wait1', mirrorX: false },
+      ]),
+    ) as CodexPetAnimationMappings
+    const recipe = createCodexPetRecipe({
+      globalMirrorX: true,
+      source: {
+        provider: 'strr-res-pak',
+        characterId: '101',
+        editionId: '1010001',
+      },
+      pet: { displayName: 'Karen' },
+      mappings,
+    })
+    const model = {
+      atlasBundle: {
+        sourceName: '101:1010001',
+        atlasPath: 'model_right.atlas',
+        atlasText: 'atlas',
+        atlasPages: new Map<string, Blob>(),
+      },
+      skeletonData: new ArrayBuffer(1),
+    }
+    const controller = new AbortController()
+
+    expect(
+      createCodexPetRecipeSamplingInput(recipe, model, controller.signal),
+    ).toMatchObject({
+      globalMirrorX: true,
+      lookRigFallback: 'static',
+      mappings,
+    })
+  })
 })

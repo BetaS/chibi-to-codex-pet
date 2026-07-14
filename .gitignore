@@ -1,5 +1,7 @@
 /assets/
 /public/assets
+/.debug-fixtures/
+/.provider-local/
 /coverage/
 /dist/
 /node_modules/
@@ -8,6 +10,12 @@
 /.npm-cache/
 /playwright-report/
 /test-results/
+/playwright.local.config.ts
+/scripts/*.local.mjs
+/scripts/*.local.py
+/e2e/*.local.spec.ts
+/src/features/livesd/*/development.local/
+/qa/**/*.local.*
 *.tsbuildinfo
 .env
 .env.*

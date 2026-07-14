@@ -136,7 +136,7 @@ Ready LiveSD source의 animation을 Codex Pet v2의 9개 표준 상태에 연결
 - **AND** 이전 source의 상태별 검색 query를 비워야 한다
 
 #### Scenario: preset 적용 후 검색 reset
-- **WHEN** 사용자가 다른 저장 preset 또는 `새 세션`을 선택한다
+- **WHEN** 사용자가 다른 저장 preset을 선택해 `프리셋 불러오기`를 실행하거나 `새 세션`을 선택한다
 - **THEN** 시스템은 검증된 mapping을 적용하고 모든 상태 combobox query를 비워야 한다
 
 ### Requirement: 상태별 실시간 Spine preview

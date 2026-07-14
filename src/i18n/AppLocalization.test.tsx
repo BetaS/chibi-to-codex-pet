@@ -7,10 +7,10 @@ import { APP_LOCALE_STORAGE_KEY } from './locale'
 
 describe('App localization shell', () => {
   it.each([
-    ['ko', '게임 리소스를 브라우저에서 직접 가져와', '게임 선택'],
-    ['en', 'Import game resources directly in your browser', 'Game selection'],
-    ['ja', 'ゲームリソースをブラウザで直接読み込み', 'ゲーム選択'],
-    ['zh-CN', '直接在浏览器中导入游戏资源', '选择游戏'],
+    ['ko', '좋아하는 캐릭터를 선택해', '게임 선택'],
+    ['en', 'Choose a favorite character', 'Game selection'],
+    ['ja', 'お気に入りのキャラクターを選び', 'ゲーム選択'],
+    ['zh-CN', '选择喜欢的角色', '选择游戏'],
   ] as const)('%s 저장 locale로 최초 shell을 렌더링한다', (locale, summary, navLabel) => {
     localStorage.setItem(APP_LOCALE_STORAGE_KEY, locale)
     render(<App />)
@@ -32,8 +32,6 @@ describe('App localization shell', () => {
       'aria-selected',
       'true',
     )
-    expect(screen.getByRole('tab', {
-      name: /Revue Starlight.*Coming soon/,
-    })).toBeDisabled()
+    expect(screen.getByRole('tab', { name: 'Revue Starlight' })).toBeEnabled()
   })
 })

@@ -5,7 +5,9 @@ import { CODEX_PET_STATES } from './contract'
 import {
   applyCodexPetSettingsPresetMappings,
   CODEX_PET_SETTINGS_PRESET_LIMIT,
+  CODEX_PET_SETTINGS_PRESET_LEGACY_STORAGE_KEY,
   CODEX_PET_SETTINGS_PRESET_STORAGE_KEY,
+  CODEX_PET_SETTINGS_PRESET_STORAGE_KEYS,
   readCodexPetSettingsPresetCatalog,
   saveCodexPetSettingsPreset,
   selectCodexPetSettingsPreset,
@@ -95,6 +97,132 @@ describe('Codex Pet settings presets', () => {
     ).toBeNull()
   })
 
+  it('STRR preset의 캐릭터와 에디션 식별자를 함께 보존한다', () => {
+    const saved = saveCodexPetSettingsPreset({
+      ...presetInput('태양의 나라 기사 - 다이바 나나'),
+      source: {
+        provider: 'strr-res-pak',
+        characterId: '104',
+        editionId: '1040001',
+      },
+    }, localStorage, 10, 'strr')
+
+    expect(saved.presets['태양의 나라 기사 - 다이바 나나']?.source).toEqual({
+      provider: 'strr-res-pak',
+      characterId: '104',
+      editionId: '1040001',
+    })
+    expect(
+      readCodexPetSettingsPresetCatalog(localStorage, 'strr')
+        .presets['태양의 나라 기사 - 다이바 나나']?.source,
+    ).toEqual({
+      provider: 'strr-res-pak',
+      characterId: '104',
+      editionId: '1040001',
+    })
+  })
+
+  it('Garupa pinned preset의 검증된 bundle ID만 보존한다', () => {
+    const saved = saveCodexPetSettingsPreset({
+      ...presetInput('토야마 카스미'),
+      source: {
+        provider: 'garupa-pinned',
+        sdAssetBundleName: '00001_2023',
+      },
+    }, localStorage, 10, 'garupa')
+
+    expect(saved.presets['토야마 카스미']?.source).toEqual({
+      provider: 'garupa-pinned',
+      sdAssetBundleName: '00001_2023',
+    })
+
+    const invalidDocument = JSON.parse(JSON.stringify(saved)) as {
+      presets: Record<string, { source: { sdAssetBundleName: string } }>
+    }
+    invalidDocument.presets['토야마 카스미']!.source.sdAssetBundleName =
+      '../00001'
+    localStorage.setItem(
+      CODEX_PET_SETTINGS_PRESET_STORAGE_KEYS.garupa,
+      JSON.stringify(invalidDocument),
+    )
+    expect(readCodexPetSettingsPresetCatalog(localStorage, 'garupa')).toEqual({
+      activePresetName: null,
+      presets: {},
+      version: 1,
+    })
+  })
+
+  it('runtime별 저장소를 격리하고 legacy catalog를 source provider별로 분리한다', () => {
+    const prsk = saveCodexPetSettingsPreset({
+      ...presetInput('Miku'),
+      source: {
+        provider: 'prsk-chibi-viewer',
+        characterId: 'sd_21miku_normal',
+      },
+    }, localStorage, 1, 'prsk')
+    const strr = saveCodexPetSettingsPreset({
+      ...presetInput('Nana'),
+      source: {
+        provider: 'strr-res-pak',
+        characterId: '104',
+        editionId: '1040001',
+      },
+    }, localStorage, 2, 'strr')
+    const garupa = saveCodexPetSettingsPreset({
+      ...presetInput('Kasumi'),
+      source: {
+        provider: 'garupa-pinned',
+        sdAssetBundleName: '00001',
+      },
+    }, localStorage, 3, 'garupa')
+
+    expect(Object.keys(
+      readCodexPetSettingsPresetCatalog(localStorage, 'prsk').presets,
+    )).toEqual(['Miku'])
+    expect(Object.keys(
+      readCodexPetSettingsPresetCatalog(localStorage, 'strr').presets,
+    )).toEqual(['Nana'])
+    expect(Object.keys(
+      readCodexPetSettingsPresetCatalog(localStorage, 'garupa').presets,
+    )).toEqual(['Kasumi'])
+    expect(() => saveCodexPetSettingsPreset({
+      ...presetInput('Wrong runtime'),
+      source: {
+        provider: 'strr-res-pak',
+        characterId: '104',
+        editionId: '1040001',
+      },
+    }, localStorage, 4, 'garupa')).toThrow(/does not belong/)
+
+    localStorage.setItem(
+      CODEX_PET_SETTINGS_PRESET_LEGACY_STORAGE_KEY,
+      JSON.stringify({
+        activePresetName: 'Nana',
+        presets: {
+          ...prsk.presets,
+          ...strr.presets,
+          ...garupa.presets,
+        },
+        version: 1,
+      }),
+    )
+    for (const storageKey of Object.values(
+      CODEX_PET_SETTINGS_PRESET_STORAGE_KEYS,
+    )) {
+      localStorage.removeItem(storageKey)
+    }
+
+    expect(Object.keys(
+      readCodexPetSettingsPresetCatalog(localStorage, 'prsk').presets,
+    )).toEqual(['Miku'])
+    expect(
+      readCodexPetSettingsPresetCatalog(localStorage, 'strr').activePresetName,
+    ).toBe('Nana')
+    expect(Object.keys(
+      readCodexPetSettingsPresetCatalog(localStorage, 'garupa').presets,
+    )).toEqual(['Kasumi'])
+  })
+
   it('catalog를 20개로 제한하고 가장 오래된 preset부터 제거한다', () => {
     for (let index = 0; index <= CODEX_PET_SETTINGS_PRESET_LIMIT; index += 1) {
       saveCodexPetSettingsPreset(
@@ -136,7 +264,11 @@ describe('Codex Pet settings presets', () => {
     })
     expect(
       localStorage.getItem(CODEX_PET_SETTINGS_PRESET_STORAGE_KEY),
-    ).toBeNull()
+    ).toBe(JSON.stringify({
+      activePresetName: null,
+      presets: {},
+      version: 1,
+    }))
 
     const blocked: CodexPetSettingsPresetStorage = {
       getItem: vi.fn(() => {

@@ -36,7 +36,10 @@ export function CodexPetStateShortcuts({
   const shortcutsDisabled = disabled || !mappings
 
   return (
-    <div className="codex-pet-state-shortcuts">
+    <div
+      className="codex-pet-state-shortcuts"
+      data-provider-capability="state-shortcuts"
+    >
       <span className="toolbar-label">{t('builder.stateShortcuts')}</span>
       <div
         aria-label={t('builder.stateShortcuts')}

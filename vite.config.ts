@@ -55,8 +55,20 @@ export default defineConfig(({ command, mode }) => {
       sitesStaticHostingPlugin(repositoryRoot),
     ],
     publicDir: command === 'serve' ? 'public' : false,
+    preview: {
+      allowedHosts,
+    },
     server: {
       allowedHosts,
+      fs: {
+        deny: [
+          '.env',
+          '.env.*',
+          '*.{crt,pem}',
+          '**/.git/**',
+          '**/.debug-fixtures/**',
+        ],
+      },
     },
     test: {
       environment: 'jsdom',

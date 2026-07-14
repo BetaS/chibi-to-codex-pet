@@ -95,15 +95,19 @@ function createServices(
     .mockReturnValueOnce('blob:test-package')
     .mockReturnValueOnce('blob:test-spritesheet')
   const revokeObjectUrl = vi.fn()
+  const trackDownload = vi.fn()
+  const copyText = vi.fn(async () => undefined)
 
   return {
     packageBlob,
     services: {
+      copyText,
       sample,
       exportPackage,
       validatePackage,
       createObjectUrl,
       revokeObjectUrl,
+      trackDownload,
     } satisfies CodexPetBuilderServices,
   }
 }
@@ -121,6 +125,63 @@ async function chooseSearchableOption(
 }
 
 describe('CodexPetBuilder', () => {
+  it('source별 기본 animation이 실제 목록에 있을 때만 초기 mapping을 덮어쓴다', async () => {
+    const onMappingsChange = vi.fn()
+    render(
+      <CodexPetBuilder
+        animations={['fallback-idle', 'Wait1', 'walk1', 'surprized1']}
+        defaultStateAnimationNames={{
+          idle: 'wait1',
+          jumping: 'surprized1',
+          review: 'missing-animation',
+          running: 'walk1',
+        }}
+        framingScale={1}
+        onMappingsChange={onMappingsChange}
+        source={source}
+      />,
+    )
+
+    await waitFor(() =>
+      expect(onMappingsChange).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          idle: expect.objectContaining({ animationName: 'Wait1' }),
+          jumping: expect.objectContaining({ animationName: 'surprized1' }),
+          review: expect.not.objectContaining({
+            animationName: 'missing-animation',
+          }),
+          running: expect.objectContaining({ animationName: 'walk1' }),
+        }),
+      ),
+    )
+  })
+
+  it('source 기본 이름을 표시하고 static look fallback을 sampler에 전달한다', async () => {
+    const user = userEvent.setup()
+    const { services } = createServices()
+    render(
+      <CodexPetBuilder
+        animations={animations}
+        framingScale={1}
+        services={services}
+        source={{
+          ...source,
+          defaultDisplayName: '태양 나라의 기사 - 다이바 나나',
+          lookRigFallback: 'static',
+        }}
+      />,
+    )
+
+    expect(screen.getByRole('textbox', { name: 'Pet 이름' })).toHaveValue(
+      '태양 나라의 기사 - 다이바 나나',
+    )
+    await user.click(screen.getByRole('button', { name: 'Codex Pet 생성' }))
+    await screen.findByRole('link', { name: 'Codex Pet ZIP 다운로드' })
+    expect(services.sample).toHaveBeenCalledWith(
+      expect.objectContaining({ lookRigFallback: 'static' }),
+    )
+  })
+
   it('완성된 package에서 locale을 바꿔도 mapping, metadata, slider와 object URL을 보존한다', async () => {
     const user = userEvent.setup()
     const { services } = createServices()
@@ -161,7 +222,7 @@ describe('CodexPetBuilder', () => {
     await user.click(screen.getByRole('button', { name: 'English' }))
 
     expect(screen.getByRole('heading', {
-      name: 'Codex Pet packaging',
+      name: 'Create a Codex Pet',
     })).toBeVisible()
     expect(screen.getByRole('combobox', {
       name: 'Wave animation',
@@ -371,6 +432,20 @@ describe('CodexPetBuilder', () => {
     await user.click(screen.getByRole('button', { name: 'Codex Pet 생성' }))
     await screen.findByRole('link', { name: 'Codex Pet ZIP 다운로드' })
 
+    const installCommand = screen.getByRole('textbox', {
+      name: 'npx 설치 명령',
+    })
+    expect((installCommand as HTMLTextAreaElement).value).toMatch(
+      /^npx -y chibi-to-codex-pet install --recipe /,
+    )
+    await user.click(screen.getByRole('button', {
+      name: 'CLI 바로가기 복사',
+    }))
+    expect(firstServices.copyText).toHaveBeenCalledWith(
+      (installCommand as HTMLTextAreaElement).value,
+    )
+    expect(screen.getByText('CLI 바로가기를 복사했습니다.')).toBeVisible()
+
     expect(screen.getByRole('combobox', { name: '저장 프리셋' })).toHaveValue(
       'Miku Preset',
     )
@@ -438,6 +513,76 @@ describe('CodexPetBuilder', () => {
       expect(onFramingChange).toHaveBeenCalledWith(1.25, { x: 9, y: -4 }),
     )
     expect(secondServices.sample).not.toHaveBeenCalled()
+  })
+
+  it('CLI 바로가기 복사 실패 시 명령과 ZIP을 유지하고 수동 복사를 안내한다', async () => {
+    const user = userEvent.setup()
+    const { services } = createServices()
+    services.copyText.mockRejectedValueOnce(new DOMException('denied'))
+    render(
+      <CodexPetBuilder
+        animations={animations}
+        framingScale={1}
+        recipeSource={{
+          provider: 'prsk-chibi-viewer',
+          characterId: 'sd_21miku_normal',
+        }}
+        services={services}
+        source={source}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Codex Pet 생성' }))
+    await screen.findByRole('link', { name: 'Codex Pet ZIP 다운로드' })
+    await user.click(screen.getByRole('button', {
+      name: 'CLI 바로가기 복사',
+    }))
+
+    expect(screen.getByRole('textbox', { name: 'npx 설치 명령' })).toBeVisible()
+    expect(screen.getByRole('link', {
+      name: 'Codex Pet ZIP 다운로드',
+    })).toBeVisible()
+    expect(screen.getByText(
+      'CLI 바로가기를 복사하지 못했습니다. 명령을 직접 복사하세요.',
+    )).toBeVisible()
+  })
+
+  it('Garupa pinned 식별자는 preset에 저장하되 지원하지 않는 CLI 명령은 만들지 않는다', async () => {
+    const user = userEvent.setup()
+    const { services } = createServices()
+    render(
+      <CodexPetBuilder
+        animations={animations}
+        framingScale={1}
+        presetRuntime="garupa"
+        presetSource={{
+          provider: 'garupa-pinned',
+          sdAssetBundleName: '00001_2023',
+        }}
+        services={services}
+        source={source}
+      />,
+    )
+
+    const displayName = screen.getByRole('textbox', { name: 'Pet 이름' })
+    await user.clear(displayName)
+    await user.type(displayName, '토야마 카스미')
+    await user.click(screen.getByRole('button', { name: 'Codex Pet 생성' }))
+    await screen.findByRole('link', { name: 'Codex Pet ZIP 다운로드' })
+
+    expect(
+      readCodexPetSettingsPresetCatalog(localStorage, 'garupa')
+        .presets['토야마 카스미']?.source,
+    ).toEqual({
+      provider: 'garupa-pinned',
+      sdAssetBundleName: '00001_2023',
+    })
+    expect(screen.queryByRole('textbox', {
+      name: 'npx 설치 명령',
+    })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', {
+      name: 'CLI 바로가기 복사',
+    })).not.toBeInTheDocument()
   })
 
   it('preset dropdown으로 설정을 전환하고 새 세션에서 catalog를 보존한 채 reset한다', async () => {
@@ -527,10 +672,10 @@ describe('CodexPetBuilder', () => {
       />,
     )
 
+    expect(screen.queryByText('v2 · 73 frames · 1536×2288')).not.toBeInTheDocument()
     expect(
-      screen.getByText('v2 · 73 frames · 1536×2288'),
-    ).toBeInTheDocument()
-    expect(screen.getByText(/atlas 기반 16방향 시선/)).toBeInTheDocument()
+      screen.getByText('애니메이션을 설정하고 설치할 Codex Pet을 만들어보세요.'),
+    ).toBeVisible()
 
     const lookMovementSlider = screen.getByRole('slider', {
       name: '눈 이동량 슬라이더',
@@ -668,6 +813,32 @@ describe('CodexPetBuilder', () => {
     })
     expect(download).toHaveAttribute('href', 'blob:test-package')
     expect(download).toHaveAttribute('download', 'test-pet.codex-pet.zip')
+    expect(services.trackDownload).not.toHaveBeenCalled()
+    download.addEventListener('click', (event) => event.preventDefault())
+    fireEvent.click(download)
+    expect(services.trackDownload).toHaveBeenCalledTimes(1)
+    const starPrompt = screen.getByRole('dialog', {
+      name: '만든 Pet이 마음에 드셨나요?',
+    })
+    expect(starPrompt).toHaveAttribute('aria-modal', 'true')
+    const repositoryLink = within(starPrompt).getByRole('link', {
+      name: 'GitHub에서 Star',
+    })
+    expect(repositoryLink).toHaveAttribute(
+      'href',
+      'https://github.com/BetaS/chibi-to-codex-pet',
+    )
+    expect(repositoryLink).toHaveAttribute('target', '_blank')
+    expect(repositoryLink).toHaveAttribute('rel', 'noreferrer')
+    expect(repositoryLink).toHaveFocus()
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(download).toHaveFocus()
+
+    fireEvent.click(download)
+    expect(services.trackDownload).toHaveBeenCalledTimes(2)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(services.validatePackage).toHaveBeenCalledWith(packageBlob, {
       allowEdgeClipping: true,
     })
@@ -771,7 +942,7 @@ describe('CodexPetBuilder', () => {
       screen.getByRole('combobox', { name: '인사 애니메이션' }),
     ).toHaveValue('w_happy_idle01_f')
     expect(
-      screen.getByText('상태 매핑과 metadata를 확인하세요.'),
+      screen.getByText('애니메이션과 Pet 정보를 확인해주세요.'),
     ).toBeInTheDocument()
   })
 
@@ -839,7 +1010,7 @@ describe('CodexPetBuilder', () => {
       screen.getByRole('combobox', { name: '인사 애니메이션' }),
     ).toHaveValue('w_happy_idle01_f')
     expect(
-      screen.getByText('상태 매핑과 metadata를 확인하세요.'),
+      screen.getByText('애니메이션과 Pet 정보를 확인해주세요.'),
     ).toBeInTheDocument()
 
     await act(async () => {
@@ -887,7 +1058,7 @@ describe('CodexPetBuilder', () => {
     await user.click(screen.getByRole('button', { name: 'Codex Pet 생성' }))
 
     expect(
-      await screen.findByText('LiveSD 표준·시선 73개 frame을 생성하고 있습니다…'),
+      await screen.findByText('Pet 애니메이션을 만드는 중입니다…'),
     ).toBeInTheDocument()
     expect(screen.getByText('120/131 · look 5/16')).toBeInTheDocument()
     expect(screen.getByRole('progressbar')).toHaveAttribute(
@@ -943,7 +1114,7 @@ describe('CodexPetBuilder', () => {
       />,
     )
     await waitFor(() =>
-      expect(screen.getByText('상태 매핑과 metadata를 확인하세요.')).toBeInTheDocument(),
+      expect(screen.getByText('애니메이션과 Pet 정보를 확인해주세요.')).toBeInTheDocument(),
     )
     expect(services.createObjectUrl).not.toHaveBeenCalled()
   })
@@ -969,7 +1140,7 @@ describe('CodexPetBuilder', () => {
 
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('PNG_CELL_EMPTY')
-    expect(alert).toHaveTextContent('사용 frame이 비어 있습니다.')
+    expect(alert).toHaveTextContent('Pet 이미지를 만들지 못했습니다.')
     expect(
       screen.queryByRole('link', { name: 'Codex Pet ZIP 다운로드' }),
     ).not.toBeInTheDocument()

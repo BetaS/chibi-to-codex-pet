@@ -40,7 +40,7 @@ describe('I18nProvider and LocaleSelector', () => {
       'true',
     )
     expect(screen.getByText(/^ja:/)).toHaveTextContent(
-      'ゲームリソースをブラウザで直接読み込み',
+      'お気に入りのキャラクターを選び',
     )
     expect(storage.setItem).toHaveBeenCalledWith(
       'chibi-to-codex-pet.locale.v1',

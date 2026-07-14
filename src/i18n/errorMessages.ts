@@ -64,14 +64,10 @@ function collectTechnicalDetails(
 }
 
 export function localizeErrorNotice(
-  locale: AppLocale,
+  _locale: AppLocale,
   t: I18nContextValue['t'],
   notice: LocalizableErrorNotice,
 ): string {
-  if (locale === 'ko' && notice.message.trim()) {
-    return notice.message
-  }
-
   const base = t(errorMessageKey(notice.code))
   const details = collectTechnicalDetails(notice)
   return details.length > 0 ? `${base} (${details.join(' · ')})` : base

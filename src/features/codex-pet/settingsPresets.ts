@@ -20,14 +20,33 @@ import {
   type CodexPetRecipeSource,
 } from './recipe'
 
-export const CODEX_PET_SETTINGS_PRESET_STORAGE_KEY =
+export type CodexPetSettingsPresetRuntime = 'garupa' | 'prsk' | 'strr'
+
+export const CODEX_PET_SETTINGS_PRESET_LEGACY_STORAGE_KEY =
   'chibi-to-codex-pet.pet-presets.v1'
+export const CODEX_PET_SETTINGS_PRESET_STORAGE_KEYS = Object.freeze({
+  garupa: 'chibi-to-codex-pet.pet-presets.garupa.v1',
+  prsk: 'chibi-to-codex-pet.pet-presets.prsk.v1',
+  strr: 'chibi-to-codex-pet.pet-presets.strr.v1',
+} satisfies Readonly<Record<CodexPetSettingsPresetRuntime, string>>)
+export const CODEX_PET_SETTINGS_PRESET_STORAGE_KEY =
+  CODEX_PET_SETTINGS_PRESET_STORAGE_KEYS.prsk
 export const CODEX_PET_SETTINGS_PRESET_VERSION = 1
 export const CODEX_PET_SETTINGS_PRESET_LIMIT = 20
 
 const PET_NAME_MAX_LENGTH = 80
 const PET_DESCRIPTION_MAX_LENGTH = 280
 const ANIMATION_NAME_MAX_LENGTH = 512
+const PRESET_SOURCE_ID_MAX_LENGTH = 128
+
+export interface CodexPetSettingsPresetGarupaPinnedSource {
+  readonly provider: 'garupa-pinned'
+  readonly sdAssetBundleName: string
+}
+
+export type CodexPetSettingsPresetSource =
+  | CodexPetRecipeSource
+  | CodexPetSettingsPresetGarupaPinnedSource
 
 export interface CodexPetSettingsPreset {
   readonly description: string
@@ -37,7 +56,7 @@ export interface CodexPetSettingsPreset {
   readonly globalMirrorX: boolean
   readonly lookMovementScale: number
   readonly mappings: CodexPetAnimationMappings
-  readonly source: CodexPetRecipeSource | null
+  readonly source: CodexPetSettingsPresetSource | null
   readonly updatedAt: number
 }
 
@@ -49,7 +68,7 @@ export interface CodexPetSettingsPresetInput {
   readonly globalMirrorX: boolean
   readonly lookMovementScale: number
   readonly mappings: Readonly<CodexPetAnimationMappings>
-  readonly source?: CodexPetRecipeSource | null
+  readonly source?: CodexPetSettingsPresetSource | null
 }
 
 export interface CodexPetSettingsPresetCatalog {
@@ -159,6 +178,40 @@ function parseMappings(value: unknown): CodexPetAnimationMappings {
   ) as CodexPetAnimationMappings
 }
 
+function parsePresetSource(value: unknown): CodexPetSettingsPresetSource {
+  if (isRecord(value) && value.provider === 'garupa-pinned') {
+    if (!hasOnlyKeys(value, ['provider', 'sdAssetBundleName'])) {
+      throw new TypeError('Invalid Garupa preset source.')
+    }
+    const sdAssetBundleName = parseBoundedString(
+      value.sdAssetBundleName,
+      PRESET_SOURCE_ID_MAX_LENGTH,
+      false,
+    ).trim()
+    if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/u.test(sdAssetBundleName)) {
+      throw new TypeError('Invalid Garupa preset bundle name.')
+    }
+    return { provider: 'garupa-pinned', sdAssetBundleName }
+  }
+  return parseCodexPetRecipeSource(value)
+}
+
+function presetSourceBelongsToRuntime(
+  source: CodexPetSettingsPresetSource | null,
+  runtime: CodexPetSettingsPresetRuntime,
+): boolean {
+  if (source === null) {
+    return true
+  }
+  if (runtime === 'prsk') {
+    return source.provider === 'custom' || source.provider === 'prsk-chibi-viewer'
+  }
+  if (runtime === 'strr') {
+    return source.provider === 'strr-res-pak'
+  }
+  return source.provider === 'garupa-pinned'
+}
+
 function parsePreset(value: unknown, key: string): CodexPetSettingsPreset {
   if (
     !isRecord(value) ||
@@ -230,7 +283,7 @@ function parsePreset(value: unknown, key: string): CodexPetSettingsPreset {
     source:
       value.source === undefined || value.source === null
         ? null
-        : parseCodexPetRecipeSource(value.source),
+        : parsePresetSource(value.source),
     updatedAt: parseNumberInRange(
       value.updatedAt,
       0,
@@ -273,37 +326,76 @@ export function parseCodexPetSettingsPresetCatalog(
 
 export function readCodexPetSettingsPresetCatalog(
   storage: CodexPetSettingsPresetStorage | null = browserStorage(),
+  runtime: CodexPetSettingsPresetRuntime = 'prsk',
 ): CodexPetSettingsPresetCatalog {
   if (!storage) {
     return createEmptyCatalog()
   }
 
+  const storageKey = CODEX_PET_SETTINGS_PRESET_STORAGE_KEYS[runtime]
   try {
-    const stored = storage.getItem(CODEX_PET_SETTINGS_PRESET_STORAGE_KEY)
+    const stored = storage.getItem(storageKey)
     if (stored === null) {
-      return createEmptyCatalog()
+      const legacyStored = storage.getItem(
+        CODEX_PET_SETTINGS_PRESET_LEGACY_STORAGE_KEY,
+      )
+      if (legacyStored === null) {
+        return createEmptyCatalog()
+      }
+      const legacyCatalog = parseCodexPetSettingsPresetCatalog(
+        JSON.parse(legacyStored),
+      )
+      const migratedPresets = Object.fromEntries(
+        Object.entries(legacyCatalog.presets).filter(([, preset]) =>
+          preset.source === null
+            ? runtime === 'prsk'
+            : presetSourceBelongsToRuntime(preset.source, runtime),
+        ),
+      )
+      const migrated: CodexPetSettingsPresetCatalog = {
+        activePresetName:
+          legacyCatalog.activePresetName &&
+          migratedPresets[legacyCatalog.activePresetName]
+            ? legacyCatalog.activePresetName
+            : null,
+        presets: migratedPresets,
+        version: CODEX_PET_SETTINGS_PRESET_VERSION,
+      }
+      writeCatalog(migrated, storage, runtime)
+      return migrated
     }
-    return parseCodexPetSettingsPresetCatalog(JSON.parse(stored))
+    const parsed = parseCodexPetSettingsPresetCatalog(JSON.parse(stored))
+    if (
+      Object.values(parsed.presets).some(
+        (preset) => !presetSourceBelongsToRuntime(preset.source, runtime),
+      )
+    ) {
+      throw new TypeError('Preset source does not belong to this runtime.')
+    }
+    return parsed
   } catch {
     try {
-      storage.removeItem(CODEX_PET_SETTINGS_PRESET_STORAGE_KEY)
+      storage.removeItem(storageKey)
     } catch {
       // A blocked storage must not interrupt the current builder session.
     }
-    return createEmptyCatalog()
+    const emptyCatalog = createEmptyCatalog()
+    writeCatalog(emptyCatalog, storage, runtime)
+    return emptyCatalog
   }
 }
 
 function writeCatalog(
   catalog: CodexPetSettingsPresetCatalog,
   storage: CodexPetSettingsPresetStorage | null,
+  runtime: CodexPetSettingsPresetRuntime,
 ): void {
   if (!storage) {
     return
   }
   try {
     storage.setItem(
-      CODEX_PET_SETTINGS_PRESET_STORAGE_KEY,
+      CODEX_PET_SETTINGS_PRESET_STORAGE_KEYS[runtime],
       JSON.stringify(catalog),
     )
   } catch {
@@ -315,6 +407,7 @@ export function saveCodexPetSettingsPreset(
   input: CodexPetSettingsPresetInput,
   storage: CodexPetSettingsPresetStorage | null = browserStorage(),
   updatedAt = Date.now(),
+  runtime: CodexPetSettingsPresetRuntime = 'prsk',
 ): CodexPetSettingsPresetCatalog {
   const displayName = input.displayName.trim()
   const preset = parsePreset(
@@ -329,7 +422,10 @@ export function saveCodexPetSettingsPreset(
     },
     displayName,
   )
-  const current = readCodexPetSettingsPresetCatalog(storage)
+  if (!presetSourceBelongsToRuntime(preset.source, runtime)) {
+    throw new TypeError('Preset source does not belong to this runtime.')
+  }
+  const current = readCodexPetSettingsPresetCatalog(storage, runtime)
   const nextEntries = [
     [displayName, preset] as const,
     ...Object.entries(current.presets).filter(
@@ -343,21 +439,22 @@ export function saveCodexPetSettingsPreset(
     presets: Object.fromEntries(nextEntries),
     version: CODEX_PET_SETTINGS_PRESET_VERSION,
   }
-  writeCatalog(next, storage)
+  writeCatalog(next, storage, runtime)
   return next
 }
 
 export function selectCodexPetSettingsPreset(
   presetName: string | null,
   storage: CodexPetSettingsPresetStorage | null = browserStorage(),
+  runtime: CodexPetSettingsPresetRuntime = 'prsk',
 ): CodexPetSettingsPresetCatalog {
-  const current = readCodexPetSettingsPresetCatalog(storage)
+  const current = readCodexPetSettingsPresetCatalog(storage, runtime)
   const activePresetName =
     presetName !== null && current.presets[presetName]
       ? presetName
       : null
   const next = { ...current, activePresetName }
-  writeCatalog(next, storage)
+  writeCatalog(next, storage, runtime)
   return next
 }
 

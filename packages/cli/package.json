@@ -1,6 +1,6 @@
 {
   "name": "chibi-to-codex-pet",
-  "version": "0.1.1",
+  "version": "0.2.0-preview",
   "type": "module",
   "license": "MIT",
   "description": "Install Codex Pet v2 payloads from LiveSD recipe commands.",

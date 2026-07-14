@@ -189,8 +189,8 @@ Playwright test installer는 download한 실제 v2 ZIP bytes를 안전하게 풀
 #### Scenario: preview와 package 일치
 - **WHEN** 150%, X `12px`, Y `8px` framing으로 package를 생성한다
 - **THEN** LiveSD preview와 export는 모두 100% 대비 1.5배, 오른쪽 12px, 아래쪽 8px라는 같은 control 의미를 사용한다
-- **AND** installed preview는 export의 57개 표준 pose 합집합으로 계산된 실제 raster 결과를 정확히 표시한다
-- **AND** LiveSD preview의 자동 fit은 현재 animation 한 pose, export의 자동 fit은 여러 pose 합집합이라는 각자의 calibration 계약을 따른다
+- **AND** animation mapping 완료 뒤 LiveSD preview와 export는 같은 57개 표준 pose의 sample time과 raw bounds 합집합으로 canonical projection을 계산한다
+- **AND** installed preview는 같은 projection으로 export한 57개 표준 pose 합집합의 실제 raster 결과를 정확히 표시한다
 
 ### Requirement: 사용자 눈 이동량과 package 결과 일관성
 웹은 ready source의 패키징 설정에 현재 locale로 표시되는 접근 가능한 눈 이동량 range를 제공해야 하며(MUST), 범위는 `50%–150%`, 기본값은 `100%`, UI 간격은 `5%`여야 한다(MUST). 생성 시작 시 선택값을 snapshot해 16개 look frame에 적용하고(MUST), remote recipe의 `pet.lookMovementScale`에 기록해 headless renderer가 같은 raster를 재현해야 한다(MUST). Schema version 1 recipe에서 이 optional 값의 기본값은 `1.00`이며(MUST), v2 `pet.json`은 이 값을 raster에만 반영해야 한다(MUST).

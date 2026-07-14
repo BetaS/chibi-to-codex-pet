@@ -13,6 +13,10 @@ import {
   resolvePrskRemoteProvider,
 } from '../livesd/prsk'
 import type { PrskRemoteModelInput } from '../livesd/prsk'
+import {
+  loadStrrCatalog,
+  loadStrrModel,
+} from '../livesd/strr/staticProvider'
 import { LIVE_SD_FRAMING_SCALE_DEFAULT } from '../livesd/rendering/framingScale'
 import { isDefaultLiveSDFramingOffset } from '../livesd/rendering/framingOffset'
 
@@ -39,18 +43,9 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary)
 }
 
-function providerSelection(recipe: CodexPetRecipe) {
-  return recipe.source.provider === 'prsk-chibi-viewer'
-    ? { kind: 'prsk-chibi-viewer' as const }
-    : {
-        kind: 'custom' as const,
-        assetBaseUrl: recipe.source.assetBaseUrl,
-      }
-}
-
 export function createCodexPetRecipeSamplingInput(
   recipe: CodexPetRecipe,
-  model: PrskRemoteModelInput,
+  model: Pick<PrskRemoteModelInput, 'atlasBundle' | 'skeletonData'>,
   signal: AbortSignal,
 ) {
   return {
@@ -62,6 +57,9 @@ export function createCodexPetRecipeSamplingInput(
     framingScale: recipe.pet.framingScale,
     globalMirrorX: recipe.globalMirrorX,
     lookMovementScale: recipe.pet.lookMovementScale,
+    ...(recipe.source.provider === 'strr-res-pak'
+      ? { lookRigFallback: 'static' as const }
+      : {}),
     skeletonData: model.skeletonData,
     mappings: recipe.mappings,
     signal,
@@ -76,18 +74,34 @@ export async function renderCodexPetRecipe(
       ? decodeCodexPetRecipe(input)
       : parseCodexPetRecipe(input)
   const controller = new AbortController()
-  const provider = resolvePrskRemoteProvider(providerSelection(recipe), {
-    development: false,
-  })
-  const catalog = await prskRemoteCatalogSource.load({
-    provider,
-    signal: controller.signal,
-  })
-  const model = await prskRemoteResourceSource.load({
-    catalog,
-    characterId: recipe.source.characterId,
-    signal: controller.signal,
-  })
+  const source = recipe.source
+  const model = source.provider === 'strr-res-pak'
+    ? await loadStrrModel({
+        catalog: await loadStrrCatalog({ signal: controller.signal }),
+        characterId: source.characterId,
+        editionId: source.editionId,
+        signal: controller.signal,
+      })
+    : await (async () => {
+        const provider = resolvePrskRemoteProvider(
+          source.provider === 'prsk-chibi-viewer'
+            ? { kind: 'prsk-chibi-viewer' }
+            : {
+                kind: 'custom',
+                assetBaseUrl: source.assetBaseUrl,
+              },
+          { development: false },
+        )
+        const catalog = await prskRemoteCatalogSource.load({
+          provider,
+          signal: controller.signal,
+        })
+        return prskRemoteResourceSource.load({
+          catalog,
+          characterId: source.characterId,
+          signal: controller.signal,
+        })
+      })()
   const sampled = await liveSD36FrameSampler.sample(
     createCodexPetRecipeSamplingInput(recipe, model, controller.signal),
   )

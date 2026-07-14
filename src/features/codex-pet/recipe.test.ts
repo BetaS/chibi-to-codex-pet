@@ -75,6 +75,28 @@ describe('Codex Pet recipe', () => {
     expect(recipe.pet.lookMovementScale).toBe(1)
   })
 
+  it('STRR res-pak source는 캐릭터와 에디션 ID를 strict round-trip한다', () => {
+    const recipe = createCodexPetRecipe({
+      source: {
+        provider: 'strr-res-pak',
+        characterId: '101',
+        editionId: '1010001',
+      },
+      pet: { displayName: 'Karen' },
+      mappings: mappings(),
+    })
+
+    expect(decodeCodexPetRecipe(encodeCodexPetRecipe(recipe)).source).toEqual({
+      provider: 'strr-res-pak',
+      characterId: '101',
+      editionId: '1010001',
+    })
+    expect(() => parseCodexPetRecipe({
+      ...recipe,
+      source: { ...recipe.source, editionId: '2020001' },
+    })).toThrow(/character ID로 시작/)
+  })
+
   it('binary payload inline을 거부한다', () => {
     const recipe = createCodexPetRecipe({
       source: { provider: 'prsk-chibi-viewer', characterId: 'sd_mob003' },

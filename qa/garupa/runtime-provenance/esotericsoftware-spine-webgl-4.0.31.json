@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "status": "branch-integration-and-distribution-approved-release-blocked",
+  "runtimeKey": "spine-4.0",
+  "scope": "local-evaluation-production-integration-and-branch-public-preview",
+  "package": {
+    "name": "@esotericsoftware/spine-webgl",
+    "version": "4.0.31",
+    "tarballUrl": "https://registry.npmjs.org/@esotericsoftware/spine-webgl/-/spine-webgl-4.0.31.tgz",
+    "integrity": "sha512-G6j31+caQJck/4UN8TVaTKnU0RPysI7ECMkCxcXBGsTmv98m0O5Wx18YgeIf//Bg8KAO+mZ/DmwzeScwGG9HPA==",
+    "tarballSha256": "fdfe7fc72b870a4da238f349634dd043390b5035dbce6782e7e4288adc6648a1",
+    "npmShasum": "6fb0dbc3b16fc7c828c04d2e6167aa6a2862b898",
+    "npmGitHead": "a6491f31bcd973e1a640d786913bf8f8cac1ae3c",
+    "releaseCommit": "425ce416bb218b28caeec47b317aa57cd7140375"
+  },
+  "transitivePackages": [
+    {
+      "name": "@esotericsoftware/spine-core",
+      "version": "4.0.31",
+      "tarballUrl": "https://registry.npmjs.org/@esotericsoftware/spine-core/-/spine-core-4.0.31.tgz",
+      "integrity": "sha512-SiP87Xudw8qfg6t1Gv4NVoqP+Tw0eaCj1ApS+GXLdCvb/i5FNQevqEt4RgEvD8j1vJy+WVriPLMJYQSdaSehgA==",
+      "tarballSha256": "0cabd4eb969f5f1f4bef9782e8302a9edf59a56db2e1eafb85fcd190624a54fc",
+      "npmShasum": "fc06207729846c56c8f7045a10335f71ff509295"
+    }
+  ],
+  "installedFiles": {
+    "webglLicenseSha256": "6142ee6cc2c03d3a918793e4750ae772bd3755c534d4a35e559e301acf51ec39",
+    "webglIndexSha256": "8e13939caf2656702877c228e98a8f5bae1a61aeda7dcb62c45e0629a10a3211",
+    "webglIifeSha256": "d82e2c32d2fbe2d47d461da5b8dd3b9daac1fbfeda74e6476114d5d70619185a",
+    "webglMinifiedIifeSha256": "db31d4ff4d604ca9971f817427277607185b233158cbb4744409288c004a6d2b",
+    "coreLicenseSha256": "6142ee6cc2c03d3a918793e4750ae772bd3755c534d4a35e559e301acf51ec39",
+    "coreIndexSha256": "85795ebb7ba6acfb936c9ce466916efaf7619a0892cf47ab733677437e19de91",
+    "coreIifeSha256": "c703fc90e26fc58dd84635655de2b6643f25cc8e5ca9f65c18869274a395b93f",
+    "coreMinifiedIifeSha256": "f1fd613f34df505e2ce37d23350917ca5d43995d66d5de4da963f143b78a2c8d"
+  },
+  "license": {
+    "packageIdentifier": "LicenseRef-LICENSE",
+    "packageLicensePath": "node_modules/@esotericsoftware/spine-webgl/LICENSE",
+    "trackedLicensePath": "third_party/esotericsoftware-spine-4.0.31/LICENSE",
+    "trackedLicenseSha256": "8f9c3dbc5bbb98eb042bfe6f9e8e4c0fab32eb256b2767bd4fc7f87d27f60619",
+    "copyrightNotice": "Copyright (c) 2013-2019, Esoteric Software LLC",
+    "currentRuntimeAgreementUrl": "https://esotericsoftware.com/spine-runtimes-license",
+    "editorAgreementUrl": "https://esotericsoftware.com/spine-editor-license",
+    "notice": "This provenance record is not a license grant. The integrating project owner attested that the project holds an applicable valid Spine Editor license. The user approved public preview and production artifact inclusion on the current feature branch; release and push remain blocked.",
+    "evaluatedCondition": "The package license permits integration under the referenced Spine Editor agreement, or otherwise requires every Product user to obtain a Spine Editor license and redistribution to include the license and copyright notice. The project owner attested to an applicable valid Spine Editor license for integration on 2026-07-11."
+  },
+  "releaseGate": {
+    "productionIntegration": "allowed",
+    "publicDistribution": "allowed",
+    "release": "blocked",
+    "condition": "Public preview and production artifact inclusion are permitted on the current feature branch. Do not release or push without a separate user instruction. Preserve the original license and copyright notice in every permitted artifact."
+  },
+  "representativeFixture": {
+    "sourceRevision": "15b3e023cfdc576212f8b3a6b001c9f26e755f23",
+    "id": "00001-s000_templete",
+    "expected": {
+      "version": "4.0.64",
+      "bones": 43,
+      "slots": 51,
+      "animations": 324,
+      "atlasPages": 1,
+      "atlasRegions": 98,
+      "defaultAnimation": "Idle",
+      "pairedEyes": true
+    }
+  }
+}

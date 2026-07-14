@@ -7,7 +7,7 @@ PRSK의 archive, remote provider와 방향 기본값을 하나의 game integrati
 ## Requirements
 
 ### Requirement: PRSK 전용 구현의 디렉터리 소유권
-시스템은 PRSK에만 적용되는 archive importer, development source, remote catalog/resource provider, provider URL·network 정책, PRSK 오류·제한·타입과 직접 대응하는 단위 테스트를 `src/features/livesd/prsk/` 하위에 배치해야 한다(SHALL). 범용 LiveSD production module은 source 독립 기능만 소유해야 한다(MUST).
+시스템은 PRSK에만 적용되는 archive importer, remote catalog/resource provider, provider URL·network 정책, PRSK 오류·제한·타입과 직접 대응하는 단위 테스트를 `src/features/livesd/prsk/` 하위에 배치해야 한다(SHALL). 범용 LiveSD production module은 source 독립 기능만 소유해야 한다(MUST).
 
 #### Scenario: PRSK 구현 위치 검사
 - **WHEN** 저장소의 production source와 대응 unit test 경로를 검사한다
@@ -37,13 +37,13 @@ Import 방향은 PRSK integration에서 범용 LiveSD module로 향해야 한다
 #### Scenario: Composition root의 PRSK 사용
 - **WHEN** App 또는 Codex Pet recipe renderer가 PRSK 기능을 사용한다
 - **THEN** 해당 소비자는 PRSK 공개 진입점을 통해 필요한 타입과 동작을 가져와야 한다
-- **AND** `prsk/archive`, `prsk/development`, `prsk/remote` 내부 경로를 직접 import해서는 안 된다
+- **AND** `prsk/archive`, `prsk/remote` 내부 경로를 직접 import해서는 안 된다
 
 ### Requirement: PRSK integration 입출력 계약
-PRSK integration은 local ZIP, development source, custom provider와 `prsk-chibi-viewer` snapshot을 source producer로 제공해야 한다(SHALL). 모든 producer는 공통 LiveSD preview 입력을 반환하고(MUST), remote recipe와 package 생성은 정의된 provider·recipe·Codex Pet v2 계약을 사용해야 한다(MUST).
+PRSK integration은 사용자가 선택한 local ZIP, custom provider와 `prsk-chibi-viewer` snapshot을 source producer로 제공해야 한다(SHALL). 모든 producer는 공통 LiveSD preview 입력을 반환하고(MUST), remote recipe와 package 생성은 정의된 provider·recipe·Codex Pet v2 계약을 사용해야 한다(MUST).
 
 #### Scenario: Local PRSK 입력
-- **WHEN** 사용자가 공통 skeleton과 유효한 PRSK character ZIP을 가져오거나 development source를 사용한다
+- **WHEN** 사용자가 공통 skeleton과 유효한 PRSK character ZIP을 가져온다
 - **THEN** integration은 archive 제한을 검증한 atlas bundle, skeleton과 source별 오류를 제공한다
 - **AND** 공통 LiveSD adapter는 실제 animation 목록과 ready preview를 생성한다
 
@@ -58,7 +58,7 @@ PRSK integration은 local ZIP, development source, custom provider와 `prsk-chib
 - **AND** 생성된 `pet.json`, spritesheet와 ZIP은 Codex Pet v2 package 계약을 만족한다
 
 ### Requirement: 구조와 산출물 검증
-프로젝트는 PRSK file ownership, import 방향, 공개 API 사용과 production asset 경계를 자동으로 검사해야 한다(SHALL). Production 및 CLI 산출물의 allowlist는 application code, renderer, runtime과 license 고지이며 PRSK development asset, provider 응답과 test fixture는 포함되지 않는다(MUST).
+프로젝트는 PRSK file ownership, import 방향, 공개 API 사용과 production asset 경계를 자동으로 검사해야 한다(SHALL). Production 및 CLI 산출물의 allowlist는 application code, renderer, runtime과 license 고지이며 provider 응답, 모델 asset과 test fixture는 포함되지 않는다(MUST).
 
 #### Scenario: 구조 경계 검사
 - **WHEN** 구조 검증을 실행한다

@@ -10,18 +10,22 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && pnpm --filter chibi-to-codex-pet build && pnpm verify:runtime && vite build && pnpm verify:dist",
+    "build": "pnpm verify:repository-boundary && tsc -b && pnpm verify:provider-harness && pnpm --filter chibi-to-codex-pet build && pnpm --filter chibi-to-codex-pet verify:pack && pnpm verify:runtime && pnpm verify:garupa-manifest && vite build && pnpm verify:dist",
     "preview": "vite preview",
     "typecheck": "tsc -b --pretty false && pnpm --filter chibi-to-codex-pet typecheck",
     "lint": "eslint .",
     "test": "vitest run && pnpm --filter chibi-to-codex-pet test",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "verify:local-npx": "node scripts/verifyLocalNpx.mjs",
+    "test:e2e:local": "playwright test --config playwright.local.config.ts",
+    "verify:provider-harness": "vitest run src/features/providerIntegrationHarness.test.tsx",
+    "verify:repository-boundary": "node build/verifyRepositoryBoundary.mjs",
     "verify:dist": "node build/verifyProductionArtifacts.mjs",
+    "verify:garupa-manifest": "node build/verifyGarupaProviderManifest.mjs",
     "verify:runtime": "node build/verifyRuntimeProvenance.mjs"
   },
   "dependencies": {
+    "@esotericsoftware/spine-webgl": "4.0.31",
     "@zip.js/zip.js": "2.8.26",
     "react": "19.2.7",
     "react-dom": "19.2.7"

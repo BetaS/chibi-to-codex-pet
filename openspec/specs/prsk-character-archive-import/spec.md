@@ -13,12 +13,8 @@
 - **WHEN** upload source에서 사용자가 한 디렉터리 아래에 `sekai_atlas.atlas`와 모든 참조 PNG를 포함한 ZIP을 선택한다
 - **THEN** 시스템은 중첩 경로와 관계없이 atlas bundle을 성공적으로 가져온다
 
-#### Scenario: Development 기본 캐릭터
-- **WHEN** development upload source에서 사용자가 캐릭터 ZIP을 선택하지 않고 local preview action을 실행하며 configured same-origin character atlas와 참조 PNG가 존재한다
-- **THEN** 시스템은 same-origin development asset을 정규화된 기본 atlas bundle로 읽고 preview 생성을 시작한다
-
-#### Scenario: Production upload 입력 미선택
-- **WHEN** production upload source에서 사용자가 캐릭터 ZIP을 선택하지 않는다
+#### Scenario: Upload 입력 미선택
+- **WHEN** upload source에서 사용자가 캐릭터 ZIP을 선택하지 않는다
 - **THEN** local preview action은 disabled 상태로 캐릭터 ZIP 선택 안내를 표시한다
 
 #### Scenario: 스켈레톤이 포함된 캐릭터 ZIP

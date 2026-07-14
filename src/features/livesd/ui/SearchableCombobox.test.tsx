@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -12,6 +12,37 @@ const OPTIONS: readonly SearchableComboboxOption[] = [
   { label: 'Hatsune Miku', value: 'sd_21miku_normal' },
   { label: 'Street Miku', value: 'sd_21miku_street' },
   { label: 'Mob Character', value: 'sd_mob001' },
+]
+
+const GROUPED_OPTIONS: readonly SearchableComboboxOption[] = [
+  {
+    group: { key: 'leo-need', label: 'Leo/need' },
+    label: 'Ichika Hoshino',
+    value: 'character:01ichika',
+  },
+  {
+    group: {
+      key: 'vivid-bad-squad',
+      label: 'Vivid BAD SQUAD',
+      searchTerms: ['vbs'],
+    },
+    label: 'Akito Shinonome',
+    value: 'character:11akito',
+  },
+  {
+    group: {
+      key: 'vivid-bad-squad',
+      label: 'Vivid BAD SQUAD',
+      searchTerms: ['vbs'],
+    },
+    label: 'Toya Aoyagi',
+    value: 'character:12touya',
+  },
+  {
+    group: { key: 'virtual-singer', label: 'VIRTUAL SINGER' },
+    label: 'Hatsune Miku',
+    value: 'character:21miku',
+  },
 ]
 
 afterEach(() => {
@@ -35,6 +66,15 @@ describe('filterComboboxOptions', () => {
 
   it('빈 query에서 canonical option 목록을 그대로 복원한다', () => {
     expect(filterComboboxOptions(OPTIONS, '')).toBe(OPTIONS)
+  })
+
+  it('group key와 label 검색은 해당 group의 selectable option만 유지한다', () => {
+    expect(filterComboboxOptions(GROUPED_OPTIONS, 'VBS')).toEqual(
+      GROUPED_OPTIONS.slice(1, 3),
+    )
+    expect(filterComboboxOptions(GROUPED_OPTIONS, 'virtual singer')).toEqual([
+      GROUPED_OPTIONS[3],
+    ])
   })
 })
 
@@ -69,6 +109,90 @@ describe('SearchableCombobox', () => {
       options[1]?.id,
     )
     expect(options[1]).toHaveAttribute('aria-selected', 'true')
+    expect(within(listbox).queryAllByRole('group')).toHaveLength(0)
+  })
+
+  it('group heading은 option이 아닌 accessible section으로 렌더링하고 pointer 선택을 보존한다', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    render(
+      <SearchableCombobox
+        label="캐릭터"
+        onChange={onChange}
+        options={GROUPED_OPTIONS}
+        value={null}
+      />,
+    )
+
+    await user.click(screen.getByRole('combobox', { name: '캐릭터' }))
+
+    const listbox = screen.getByRole('listbox', { name: '캐릭터' })
+    expect(
+      within(listbox).getAllByRole('group').map(
+        (group) => group.getAttribute('aria-labelledby'),
+      ),
+    ).toHaveLength(3)
+    expect(
+      within(listbox).getAllByRole('group').map(
+        (group) => group.querySelector(
+          '.searchable-combobox__group-heading',
+        )?.textContent,
+      ),
+    ).toEqual(['Leo/need', 'Vivid BAD SQUAD', 'VIRTUAL SINGER'])
+    expect(
+      within(listbox).getAllByRole('option').map((option) => option.textContent),
+    ).toEqual([
+      'Ichika Hoshino',
+      'Akito Shinonome',
+      'Toya Aoyagi',
+      'Hatsune Miku',
+    ])
+    expect(
+      within(listbox).queryByRole('option', { name: 'Vivid BAD SQUAD' }),
+    ).not.toBeInTheDocument()
+
+    await user.click(
+      within(listbox).getByRole('option', { name: 'Hatsune Miku' }),
+    )
+    expect(onChange).toHaveBeenCalledWith(
+      'character:21miku',
+      GROUPED_OPTIONS[3],
+    )
+  })
+
+  it('group 검색 뒤 arrow key는 heading을 건너뛰고 실제 option만 commit한다', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    render(
+      <SearchableCombobox
+        label="캐릭터"
+        onChange={onChange}
+        options={GROUPED_OPTIONS}
+        value={null}
+      />,
+    )
+
+    const combobox = screen.getByRole('combobox', { name: '캐릭터' })
+    await user.click(combobox)
+    await user.type(combobox, 'VBS')
+
+    const listbox = screen.getByRole('listbox', { name: '캐릭터' })
+    expect(
+      within(listbox).getAllByRole('group').map((group) => group.textContent),
+    ).toEqual(['Vivid BAD SQUADAkito ShinonomeToya Aoyagi'])
+    const options = within(listbox).getAllByRole('option')
+    expect(options.map((option) => option.textContent)).toEqual([
+      'Akito Shinonome',
+      'Toya Aoyagi',
+    ])
+    expect(combobox).toHaveAttribute('aria-activedescendant', options[0]?.id)
+
+    await user.keyboard('{ArrowDown}{Enter}')
+
+    expect(onChange).toHaveBeenCalledWith(
+      'character:12touya',
+      GROUPED_OPTIONS[2],
+    )
   })
 
   it('popup을 열면 선택된 option이 보이도록 자동 스크롤한다', async () => {
@@ -113,6 +237,52 @@ describe('SearchableCombobox', () => {
         Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView')
       }
     }
+  })
+
+  it('viewport 하단에서는 body portal popup을 위로 배치하고 scroll 시 다시 계산한다', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('innerHeight', 800)
+    vi.stubGlobal('innerWidth', 1200)
+    render(
+      <div style={{ overflow: 'hidden' }}>
+        <SearchableCombobox
+          label="애니메이션"
+          onChange={vi.fn()}
+          options={OPTIONS}
+          value={null}
+        />
+      </div>,
+    )
+
+    const combobox = screen.getByRole('combobox', { name: '애니메이션' })
+    let inputTop = 740
+    vi.spyOn(combobox, 'getBoundingClientRect').mockImplementation(() => ({
+      bottom: inputTop + 40,
+      height: 40,
+      left: 100,
+      right: 420,
+      top: inputTop,
+      width: 320,
+      x: 100,
+      y: inputTop,
+      toJSON: () => ({}),
+    }))
+
+    await user.click(combobox)
+
+    const listbox = screen.getByRole('listbox', { name: '애니메이션' })
+    expect(listbox.parentElement).toBe(document.body)
+    expect(listbox).toHaveAttribute('data-placement', 'above')
+    expect(listbox.style.bottom).not.toBe('auto')
+    expect(Number.parseFloat(listbox.style.maxHeight)).toBeLessThanOrEqual(288)
+
+    inputTop = 100
+    document.dispatchEvent(new Event('scroll'))
+    await waitFor(() => {
+      expect(listbox).toHaveAttribute('data-placement', 'below')
+    })
+    expect(listbox.style.top).not.toBe('auto')
+    expect(combobox).toHaveAttribute('aria-expanded', 'true')
   })
 
   it('검색과 keyboard highlight는 commit과 network 요청을 만들지 않고 Enter로만 option을 commit한다', async () => {
