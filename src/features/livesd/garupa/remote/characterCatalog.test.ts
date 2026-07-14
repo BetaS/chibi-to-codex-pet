@@ -30,8 +30,10 @@ function character(
   names: readonly (string | null)[],
   bundleNames: readonly string[],
   characterType = 'unique',
+  bandId: number | null = null,
 ) {
   return {
+    bandId,
     characterType,
     characterName: names,
     seasonCostumeListMap: {
@@ -52,16 +54,34 @@ function validCharacters() {
       1,
       ['戸山 香澄', 'Kasumi Toyama', '戶山 香澄', '户山 香澄', '토야마 카스미'],
       ['00001'],
+      'unique',
+      1,
     ),
     2: character(
       2,
       ['丸山 彩', 'Aya Maruyama', '丸山 彩', '丸山 彩', null],
       ['00002'],
+      'unique',
+      4,
+    ),
+    3: character(
+      3,
+      ['重複A', 'Duplicate A', 'Duplicate A', 'Duplicate A', '중복A'],
+      ['00003'],
+      'unique',
+      1,
+    ),
+    4: character(
+      4,
+      ['重複B', 'Duplicate B', 'Duplicate B', 'Duplicate B', '중복B'],
+      ['00003'],
+      'unique',
+      2,
     ),
     1001: character(
       1001,
       ['モブA', 'Mob A', 'Mob A', 'Mob A', '모브A'],
-      ['01001'],
+      ['01001', '01002'],
       'another',
     ),
     1046: character(
@@ -78,7 +98,10 @@ function validIndex() {
     'assets-star-builddata-00001-builddata.asset',
     'assets-star-builddata-00001_hurisode-builddata.asset',
     'assets-star-builddata-00002-builddata.asset',
+    'assets-star-builddata-00003-builddata.asset',
     'assets-star-builddata-01001-builddata.asset',
+    'assets-star-builddata-01001_variant-builddata.asset',
+    'assets-star-builddata-01002-builddata.asset',
     'assets-star-builddata-09999-builddata.asset',
   ]
   return {
@@ -95,33 +118,73 @@ describe('Garupa pinned character catalog', () => {
   it('maps exact and suffix bundles to localized names without guessing ambiguous IDs', () => {
     const catalog = parseGarupaPinnedCharacterCatalog(
       encodeJson(validCharacters()),
-      ['00001', '00001_hurisode', '00002', '01001', '09999'],
+      [
+        '00001',
+        '00001_hurisode',
+        '00002',
+        '00003',
+        '01001',
+        '01001_variant',
+        '01002',
+        '09999',
+      ],
     )
     const byBundle = new Map(
       catalog.entries.map((entry) => [entry.bundleName, entry]),
     )
 
     expect(byBundle.get('00001')).toMatchObject({
+      bandId: 1,
       characterId: 1,
+      characterKind: 'unique',
       resolution: 'exact',
     })
     expect(localizeGarupaCharacterName(byBundle.get('00001')!, 'ko')).toBe(
       '토야마 카스미',
     )
     expect(byBundle.get('00001_hurisode')).toMatchObject({
+      bandId: 1,
       characterId: 1,
+      characterKind: 'unique',
       resolution: 'base',
     })
     expect(localizeGarupaCharacterName(byBundle.get('00002')!, 'ko')).toBe(
       'Aya Maruyama',
     )
-    expect(byBundle.get('01001')).toMatchObject({
+    expect(byBundle.get('00002')).toMatchObject({ bandId: 4 })
+    expect(byBundle.get('00003')).toMatchObject({
+      bandId: null,
       characterId: null,
+      characterKind: 'unmapped',
       names: null,
       resolution: 'ambiguous',
     })
-    expect(byBundle.get('09999')).toMatchObject({
+    expect(byBundle.get('01001')).toMatchObject({
+      bandId: null,
       characterId: null,
+      characterKind: 'mob',
+      names: null,
+      resolution: 'ambiguous',
+    })
+    expect(byBundle.get('01001_variant')).toMatchObject({
+      characterId: null,
+      characterKind: 'mob',
+      names: null,
+      resolution: 'ambiguous',
+    })
+    expect(byBundle.get('01002')).toMatchObject({
+      bandId: null,
+      characterId: 1001,
+      characterKind: 'mob',
+      resolution: 'exact',
+    })
+    expect(localizeGarupaCharacterName(byBundle.get('01002')!, 'ko')).toBe(
+      '모브A',
+    )
+    expect(byBundle.get('09999')).toMatchObject({
+      bandId: null,
+      characterId: null,
+      characterKind: 'unmapped',
       names: null,
       resolution: 'unresolved',
     })
@@ -159,6 +222,14 @@ describe('Garupa pinned character catalog', () => {
     ).toThrowError(expect.objectContaining({
       code: 'GARUPA_REMOTE_CATALOG_INVALID',
     }))
+
+    const invalidBand = validCharacters()
+    invalidBand[1].bandId = 0
+    expect(() =>
+      parseGarupaPinnedCharacterCatalog(encodeJson(invalidBand), ['00001']),
+    ).toThrowError(expect.objectContaining({
+      code: 'GARUPA_REMOTE_CATALOG_INVALID',
+    }))
   })
 
   it('loads only the two exact-commit catalogs declared by the provider manifest', async () => {
@@ -186,7 +257,7 @@ describe('Garupa pinned character catalog', () => {
       fetchBytes,
     })
 
-    expect(catalog.entries).toHaveLength(5)
+    expect(catalog.entries).toHaveLength(8)
     expect(fetchBytes.mock.calls.map(([path]) => path)).toEqual([
       'sdchara/_info.json',
       'data/characters.all.5.json',

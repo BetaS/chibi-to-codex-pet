@@ -32,7 +32,6 @@ describe('LiveSD game integration architecture boundary', () => {
     ).toEqual([])
     expect(entriesUnder('/prsk/archive/').length).toBeGreaterThan(0)
     expect(entriesUnder('/prsk/remote/').length).toBeGreaterThan(0)
-    expect(entriesUnder('/prsk/development/').length).toBeGreaterThan(0)
     expect(entriesUnder('/garupa/importer/').length).toBeGreaterThan(0)
     expect(entriesUnder('/garupa/integration/').length).toBeGreaterThan(0)
     expect(entriesUnder('/garupa/remote/').length).toBeGreaterThan(0)
@@ -72,7 +71,7 @@ describe('LiveSD game integration architecture boundary', () => {
           !path.includes('/livesd/garupa/'),
       )
       .filter(([, source]) =>
-        /livesd\/(?:prsk\/(?:archive|development|remote)|garupa\/(?:importer|integration|remote|rendering))/u.test(
+        /livesd\/(?:prsk\/(?:archive|remote)|garupa\/(?:importer|integration|remote|rendering))/u.test(
           source,
         ),
       )

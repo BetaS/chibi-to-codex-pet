@@ -121,7 +121,7 @@ Foundation 계층은 app shell, 공통 UI와 composition을 소유하고, LiveSD
 - **THEN** build는 feature가 공급하는 고정 `spine-webgl.js`, 원문 LICENSE와 third-party notices를 포함한다
 
 #### Scenario: production 모델 asset 경계
-- **WHEN** development에서 `public/assets` symlink와 로컬 PRSK 자산을 사용한 뒤 production build를 만든다
+- **WHEN** LiveSD provider 기능을 포함한 production build를 만든다
 - **THEN** build 산출물에는 `.skel`, `sekai_atlas.atlas` 또는 PRSK PNG 모델 파일이 포함되지 않는다
 
 #### Scenario: production option과 origin 경계

@@ -97,7 +97,7 @@ B/C/<atlas가 참조하는 PNG page>
 
 Production provider는 HTTPS를 사용합니다. Development에서는 localhost의 HTTP endpoint도 사용할 수 있습니다. Browser는 선택한 provider로 직접 요청하므로 provider는 IP 주소, User-Agent, 요청 시각과 같은 일반적인 network metadata를 수신할 수 있습니다.
 
-### STRR 기본 미러와 오프라인 백업
+### STRR 기본 미러와 local 운영 경계
 
 STRR 기본 provider는 다음 immutable commit root입니다.
 
@@ -107,35 +107,7 @@ https://raw.githubusercontent.com/clyerick/res-pak/866b72570450d6e38d0d441d387d0
 
 앱은 먼저 `catalog.json`을 읽고 캐릭터→에디션 선택 뒤 해당 캐릭터의 skeleton과 선택한 에디션의 atlas·PNG만 가져옵니다. 배포 bundle에는 모델 파일을 넣지 않습니다. GitHub raw mirror는 브라우저의 IP 주소, User-Agent, 요청 시각 같은 일반적인 network metadata를 받을 수 있습니다. 검증한 commit을 사용하므로 `19f03de2` branch가 나중에 이동해도 기본 provider가 조용히 바뀌지 않습니다.
 
-Karth API는 캐릭터·에디션 표시 이름을 보완하는 acquisition source일 뿐 runtime dependency가 아닙니다. 현재 응답을 원본 byte, 선택된 HTTP header, SHA-256 manifest와 정규화 catalog로 백업합니다.
-
-```bash
-node scripts/backupKarthApi.mjs \
-  --output ~/data/strr/outputs/karth_api_backup_YYYYMMDD \
-  --consumer-commit <KarthuriaApp-commit>
-```
-
-보존한 Spine archive와 Karth metadata snapshot을 결합해 Git에서 제외된 오프라인 백업을 만듭니다. 보호 처리 key table과 texture decoder는 저장소 밖 입력으로만 사용되며 백업이나 production bundle에 복사되지 않습니다.
-
-```bash
-python3 scripts/prepareStrrLocalBackup.py \
-  --archive ~/data/strr/outputs/starira_sd_chara_spine_extracted_YYYYMMDD.tar.gz \
-  --metadata ~/data/strr/outputs/karth_api_backup_YYYYMMDD/normalized/catalog.json \
-  --key-source /path/to/relive_dm/images.py \
-  --decoder-path /path/to/texture2ddecoder \
-  --output ~/data/strr/local_backup
-```
-
-원본 Karth API 응답도 같은 오프라인 백업 안에 versioned JSON으로 보존하려면 검증된 snapshot을 설치합니다. 이 명령은 원본 응답의 byte 수와 SHA-256을 다시 확인한 뒤 snapshot manifest, index와 백업 전체 `SHA256SUMS`를 갱신합니다.
-
-```bash
-node scripts/installKarthStaticSnapshot.mjs \
-  --backup ~/data/strr/outputs/karth_api_backup_YYYYMMDD \
-  --archive ~/data/strr/local_backup \
-  --snapshot-id YYYYMMDD
-```
-
-설치한 응답은 백업 내부의 `api/karth/YYYYMMDD/`와 `api/karth/index.json`에만 저장됩니다. 앱은 development를 포함한 모든 실행 모드에서 이 로컬 디렉터리를 읽거나 HTTP 경로로 제공하지 않습니다. STRR runtime은 항상 위의 고정된 원격 미러만 사용하며 GitHub Pages artifact에도 로컬 모델이나 Karth 응답을 복사하지 않습니다.
+Karth API는 캐릭터·에디션 표시 이름을 보완하는 acquisition source일 뿐 runtime dependency가 아닙니다. Karth 응답 백업, 보존한 Spine archive 변환과 snapshot 설치 도구는 operator-local 파일로만 유지하며 Git, npm package와 CI에 포함하지 않습니다. 원본 응답·key table·texture decoder·model asset도 repository 밖에서만 보관합니다. STRR runtime은 위 고정 원격 미러만 사용하고 GitHub Pages artifact에는 Karth 응답이나 로컬 모델을 복사하지 않습니다.
 
 ## Codex Pet 설치
 
@@ -157,10 +129,11 @@ npx -y chibi-to-codex-pet install --recipe <recipe>
 
 설정 preset에는 PRSK character ID, STRR character·edition ID 또는 Garupa pinned bundle ID가 저장되어 **프리셋 불러오기** 시 해당 모델과 설정을 복원합니다. Recipe에는 CLI renderer가 지원하는 PRSK·STRR provider 식별자, scale·offset, 눈 이동량, metadata와 animation mapping이 기록됩니다. 모델과 생성 이미지 byte는 포함하지 않으며 실행 시 검증된 provider에서 읽고 local renderer가 생성합니다.
 
-CLI package를 저장소에서 검증하려면 다음 명령을 사용합니다.
+CLI package allowlist를 저장소에서 검증하려면 다음 명령을 사용합니다.
 
 ```bash
-pnpm verify:local-npx -- --no-render
+pnpm --filter chibi-to-codex-pet build
+pnpm --filter chibi-to-codex-pet verify:pack
 ```
 
 ## 개발과 검증
@@ -170,37 +143,20 @@ pnpm typecheck
 pnpm lint
 pnpm test
 pnpm test:e2e
+pnpm verify:repository-boundary
 pnpm build
 pnpm verify:runtime
 pnpm verify:garupa-manifest
-pnpm verify:garupa-spine40-local
-pnpm verify:local-npx -- --no-render
 openspec validate --specs --strict
 ```
 
-실제 모델 기반 Playwright 사례는 개발자가 명시적으로 제공한 local fixture가 있을 때 실행됩니다. Production build 검사기는 모델 asset, 고정 character catalog와 사용자 provider URL이 배포 산출물에 섞이지 않았는지 확인합니다.
+기본 `pnpm test:e2e`는 synthetic/intercepted fixture만 사용하는 CI-safe suite입니다. 실제 provider 자료가 필요한 ignored `*.local.spec.ts`가 개발자 worktree에 있을 때만 `pnpm test:e2e:local`로 명시 실행합니다. Repository boundary와 production build 검사기는 provider API 응답, 모델 asset, local script·smoke와 사용자 provider URL이 추적 파일, CI 또는 배포 산출물에 섞이지 않았는지 확인합니다.
 
 ### Garupa 디버그 snapshot
 
 Garupa Spine SD 조사는 `bangdream-live2d`의 고정된 full commit만 사용합니다. runtime metadata manifest는 개발 서버와 build에서 deployment base 아래의 `manifests/garupa/bangdream-live2d.v1.json`으로 제공되며 repository, commit, catalog hash와 요청 정책만 포함합니다. 원본 모델 byte와 provider 라이선스 상태는 포함하지 않습니다.
 
-로컬에서 exact `sdchara` snapshot, selection metadata, hash inventory와 대표 canonical ZIP을 확보하려면 다음 명령을 사용합니다.
-
-```bash
-pnpm backup:garupa-debug
-```
-
-기본 저장 위치는 repository 밖의 macOS `~/Library/Application Support/chibi-to-codex-pet/private-fixtures/`입니다. 다른 repository 외부 위치를 사용하려면 `CHIBI_PRIVATE_FIXTURE_ROOT`를 지정합니다. Vite는 workspace root 파일도 development URL로 제공할 수 있으므로 `.debug-fixtures/`, `assets/`, `public/`을 포함한 repository 내부 경로는 Garupa 원본 백업에 사용할 수 없습니다.
-
-검증된 private fixture와 공식 Spine WebGL `4.0.31` production dependency로 skeleton parse와 첫 WebGL frame을 검증하려면 다음 명령을 사용합니다. `GARUPA_PROBE_FULL=1`은 실제 9-state mapping, straight-alpha, paired-eye 16방향과 결정적 73-frame atlas를 메모리에서 두 번 생성해 독립 decode/cell validator까지 실행합니다. Family command는 private snapshot의 15개 model family를 parse하고 paired-eye가 없는 cat family를 preview-only로 분류합니다.
-
-```bash
-pnpm verify:garupa-spine40-local
-GARUPA_PROBE_FULL=1 pnpm verify:garupa-spine40-local
-pnpm verify:garupa-families-local
-```
-
-이 명령은 runtime과 fixture를 격리된 process/browser memory에만 넣고 외부 요청, fixture 서빙, screenshot 또는 모델 산출물을 만들지 않습니다. 검증 결과와 hash만 `qa/garupa/`에 기록합니다. 적용 가능한 Spine Editor license 보유 및 이 feature branch의 public preview·production artifact 포함 승인을 기록했으며, `garupa` registry는 `available`과 versioned lazy-loader application entry에 연결됩니다. Production web에는 공식 Spine 4.0 runtime JavaScript, 원문 LICENSE, copyright notice와 고정 provider metadata가 포함되지만 Garupa 원본 asset은 포함되지 않습니다. Release·push는 별도 사용자 지시 전까지 수행하지 않습니다.
+Exact `sdchara` snapshot 확보, private fixture 검증, model-family probe와 compatibility evidence 생성은 ignored operator-local script와 repository 밖 저장소에서만 수행합니다. 이 도구와 evidence는 root package script, Git 및 CI에 포함하지 않습니다. 추적되는 자료는 immutable repository·commit·delivery URL, catalog digest, runtime provenance와 license 고지뿐입니다. Production web에는 공식 Spine 4.0 runtime JavaScript와 고정 provider metadata가 포함되지만 Garupa API response와 원본 asset은 포함되지 않습니다.
 
 ## 정적 배포
 

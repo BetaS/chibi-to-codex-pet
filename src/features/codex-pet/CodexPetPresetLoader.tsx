@@ -23,7 +23,10 @@ export function CodexPetPresetLoader({
   const { t } = useI18n()
 
   return (
-    <section className="panel-section preset-selection-section">
+    <section
+      className="panel-section preset-selection-section"
+      data-provider-capability="preset-restoration"
+    >
       <div className="step-heading">
         <span>00</span>
         <div>
