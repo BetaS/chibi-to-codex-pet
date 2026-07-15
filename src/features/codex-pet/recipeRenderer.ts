@@ -7,12 +7,18 @@ import { serializeCodexPetManifest } from './manifest'
 import { exportCodexPetPackage } from './packageExporter'
 import { validateCodexPetPackage } from './packageValidator'
 import { liveSD36FrameSampler } from '../livesd/export/LiveSD36FrameSampler'
+import type { LiveSDFrameSamplerContract } from '../livesd/export/types'
+import {
+  GarupaSpine40FrameSampler,
+  materializeGarupaPinnedSnapshot,
+  officialGarupaSpine40RuntimeAdapter,
+} from '../livesd/garupa'
+import type { LiveSDAtlasBundle } from '../livesd/model'
 import {
   prskRemoteCatalogSource,
   prskRemoteResourceSource,
   resolvePrskRemoteProvider,
 } from '../livesd/prsk'
-import type { PrskRemoteModelInput } from '../livesd/prsk'
 import {
   loadStrrCatalog,
   loadStrrModel,
@@ -26,6 +32,25 @@ export interface CodexPetRecipeRenderResult {
   readonly petJson: string
   readonly spritesheetBase64: string
 }
+
+interface CodexPetRecipeModel {
+  readonly atlasBundle: LiveSDAtlasBundle
+  readonly skeletonData: ArrayBuffer
+}
+
+export interface CodexPetRecipeSamplingServices {
+  readonly garupaSpine40: Pick<GarupaSpine40FrameSampler, 'sample'>
+  readonly liveSD36: Pick<LiveSDFrameSamplerContract, 'sample'>
+}
+
+const garupaSpine40FrameSampler = new GarupaSpine40FrameSampler({
+  runtimeAdapter: officialGarupaSpine40RuntimeAdapter,
+})
+
+const DEFAULT_RECIPE_SAMPLING_SERVICES = Object.freeze({
+  garupaSpine40: garupaSpine40FrameSampler,
+  liveSD36: liveSD36FrameSampler,
+}) satisfies CodexPetRecipeSamplingServices
 
 declare global {
   interface Window {
@@ -45,7 +70,7 @@ function bytesToBase64(bytes: Uint8Array): string {
 
 export function createCodexPetRecipeSamplingInput(
   recipe: CodexPetRecipe,
-  model: Pick<PrskRemoteModelInput, 'atlasBundle' | 'skeletonData'>,
+  model: CodexPetRecipeModel,
   signal: AbortSignal,
 ) {
   return {
@@ -66,6 +91,57 @@ export function createCodexPetRecipeSamplingInput(
   }
 }
 
+export function sampleCodexPetRecipeFrames(
+  recipe: CodexPetRecipe,
+  model: CodexPetRecipeModel,
+  signal: AbortSignal,
+  services: CodexPetRecipeSamplingServices =
+    DEFAULT_RECIPE_SAMPLING_SERVICES,
+) {
+  const samplingInput = createCodexPetRecipeSamplingInput(
+    recipe,
+    model,
+    signal,
+  )
+  return recipe.source.provider === 'garupa-pinned'
+    ? services.garupaSpine40.sample(samplingInput)
+    : services.liveSD36.sample(samplingInput)
+}
+
+async function loadCodexPetRecipeModel(
+  recipe: CodexPetRecipe,
+  signal: AbortSignal,
+): Promise<CodexPetRecipeModel> {
+  const source = recipe.source
+  if (source.provider === 'garupa-pinned') {
+    return materializeGarupaPinnedSnapshot(source.sdAssetBundleName, { signal })
+  }
+  if (source.provider === 'strr-res-pak') {
+    return loadStrrModel({
+      catalog: await loadStrrCatalog({ signal }),
+      characterId: source.characterId,
+      editionId: source.editionId,
+      signal,
+    })
+  }
+
+  const provider = resolvePrskRemoteProvider(
+    source.provider === 'prsk-chibi-viewer'
+      ? { kind: 'prsk-chibi-viewer' }
+      : {
+          kind: 'custom',
+          assetBaseUrl: source.assetBaseUrl,
+        },
+    { development: false },
+  )
+  const catalog = await prskRemoteCatalogSource.load({ provider, signal })
+  return prskRemoteResourceSource.load({
+    catalog,
+    characterId: source.characterId,
+    signal,
+  })
+}
+
 export async function renderCodexPetRecipe(
   input: CodexPetRecipe | string,
 ): Promise<CodexPetRecipeRenderResult> {
@@ -74,36 +150,11 @@ export async function renderCodexPetRecipe(
       ? decodeCodexPetRecipe(input)
       : parseCodexPetRecipe(input)
   const controller = new AbortController()
-  const source = recipe.source
-  const model = source.provider === 'strr-res-pak'
-    ? await loadStrrModel({
-        catalog: await loadStrrCatalog({ signal: controller.signal }),
-        characterId: source.characterId,
-        editionId: source.editionId,
-        signal: controller.signal,
-      })
-    : await (async () => {
-        const provider = resolvePrskRemoteProvider(
-          source.provider === 'prsk-chibi-viewer'
-            ? { kind: 'prsk-chibi-viewer' }
-            : {
-                kind: 'custom',
-                assetBaseUrl: source.assetBaseUrl,
-              },
-          { development: false },
-        )
-        const catalog = await prskRemoteCatalogSource.load({
-          provider,
-          signal: controller.signal,
-        })
-        return prskRemoteResourceSource.load({
-          catalog,
-          characterId: source.characterId,
-          signal: controller.signal,
-        })
-      })()
-  const sampled = await liveSD36FrameSampler.sample(
-    createCodexPetRecipeSamplingInput(recipe, model, controller.signal),
+  const model = await loadCodexPetRecipeModel(recipe, controller.signal)
+  const sampled = await sampleCodexPetRecipeFrames(
+    recipe,
+    model,
+    controller.signal,
   )
   const exported = await exportCodexPetPackage({
     metadata: {

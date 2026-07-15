@@ -777,6 +777,10 @@ function CodexPetBuilderContent({
       })
       setProgress(null)
       setPhase('ready')
+      if (!starPromptShownRef.current) {
+        starPromptShownRef.current = true
+        setIsStarPromptOpen(true)
+      }
       try {
         const nextCatalog = saveCodexPetSettingsPreset(
           {
@@ -830,10 +834,6 @@ function CodexPetBuilderContent({
   }, [])
   const handleDownload = useCallback(() => {
     resolvedServices.trackDownload()
-    if (!starPromptShownRef.current) {
-      starPromptShownRef.current = true
-      setIsStarPromptOpen(true)
-    }
   }, [resolvedServices])
 
   const copyInstallCommand = async () => {
@@ -854,6 +854,7 @@ function CodexPetBuilderContent({
       aria-labelledby="codex-pet-builder-title"
       className="codex-pet-builder"
       data-provider-capability="pet-builder"
+      data-provider-cli-recipe={recipeSource?.provider}
     >
       <div className="codex-pet-builder__header">
         <div>
@@ -1152,7 +1153,7 @@ function CodexPetBuilderContent({
       <GitHubStarPrompt
         isOpen={isStarPromptOpen}
         onClose={closeStarPrompt}
-        triggerRef={downloadLinkRef}
+        returnFocusRef={downloadLinkRef}
       />
     </section>
   )

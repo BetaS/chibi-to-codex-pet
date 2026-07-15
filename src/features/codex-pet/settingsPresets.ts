@@ -24,29 +24,32 @@ export type CodexPetSettingsPresetRuntime = 'garupa' | 'prsk' | 'strr'
 
 export const CODEX_PET_SETTINGS_PRESET_LEGACY_STORAGE_KEY =
   'chibi-to-codex-pet.pet-presets.v1'
-export const CODEX_PET_SETTINGS_PRESET_STORAGE_KEYS = Object.freeze({
+export const CODEX_PET_SETTINGS_PRESET_V1_STORAGE_KEYS = Object.freeze({
   garupa: 'chibi-to-codex-pet.pet-presets.garupa.v1',
   prsk: 'chibi-to-codex-pet.pet-presets.prsk.v1',
   strr: 'chibi-to-codex-pet.pet-presets.strr.v1',
 } satisfies Readonly<Record<CodexPetSettingsPresetRuntime, string>>)
+export const CODEX_PET_SETTINGS_PRESET_STORAGE_KEYS = Object.freeze({
+  garupa: 'chibi-to-codex-pet.pet-presets.garupa.v2',
+  prsk: 'chibi-to-codex-pet.pet-presets.prsk.v2',
+  strr: 'chibi-to-codex-pet.pet-presets.strr.v2',
+} satisfies Readonly<Record<CodexPetSettingsPresetRuntime, string>>)
 export const CODEX_PET_SETTINGS_PRESET_STORAGE_KEY =
   CODEX_PET_SETTINGS_PRESET_STORAGE_KEYS.prsk
-export const CODEX_PET_SETTINGS_PRESET_VERSION = 1
+export const CODEX_PET_SETTINGS_PRESET_VERSION = 2
+export const CODEX_PET_SETTINGS_PRESET_SCHEMA_VERSION = 2
 export const CODEX_PET_SETTINGS_PRESET_LIMIT = 20
 
 const PET_NAME_MAX_LENGTH = 80
 const PET_DESCRIPTION_MAX_LENGTH = 280
 const ANIMATION_NAME_MAX_LENGTH = 512
-const PRESET_SOURCE_ID_MAX_LENGTH = 128
 
-export interface CodexPetSettingsPresetGarupaPinnedSource {
-  readonly provider: 'garupa-pinned'
-  readonly sdAssetBundleName: string
-}
+export type CodexPetSettingsPresetGarupaPinnedSource = Extract<
+  CodexPetRecipeSource,
+  { readonly provider: 'garupa-pinned' }
+>
 
-export type CodexPetSettingsPresetSource =
-  | CodexPetRecipeSource
-  | CodexPetSettingsPresetGarupaPinnedSource
+export type CodexPetSettingsPresetSource = CodexPetRecipeSource
 
 export interface CodexPetSettingsPreset {
   readonly description: string
@@ -56,6 +59,7 @@ export interface CodexPetSettingsPreset {
   readonly globalMirrorX: boolean
   readonly lookMovementScale: number
   readonly mappings: CodexPetAnimationMappings
+  readonly schemaVersion: typeof CODEX_PET_SETTINGS_PRESET_SCHEMA_VERSION
   readonly source: CodexPetSettingsPresetSource | null
   readonly updatedAt: number
 }
@@ -179,20 +183,6 @@ function parseMappings(value: unknown): CodexPetAnimationMappings {
 }
 
 function parsePresetSource(value: unknown): CodexPetSettingsPresetSource {
-  if (isRecord(value) && value.provider === 'garupa-pinned') {
-    if (!hasOnlyKeys(value, ['provider', 'sdAssetBundleName'])) {
-      throw new TypeError('Invalid Garupa preset source.')
-    }
-    const sdAssetBundleName = parseBoundedString(
-      value.sdAssetBundleName,
-      PRESET_SOURCE_ID_MAX_LENGTH,
-      false,
-    ).trim()
-    if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/u.test(sdAssetBundleName)) {
-      throw new TypeError('Invalid Garupa preset bundle name.')
-    }
-    return { provider: 'garupa-pinned', sdAssetBundleName }
-  }
   return parseCodexPetRecipeSource(value)
 }
 
@@ -212,20 +202,31 @@ function presetSourceBelongsToRuntime(
   return source.provider === 'garupa-pinned'
 }
 
-function parsePreset(value: unknown, key: string): CodexPetSettingsPreset {
+function parsePreset(
+  value: unknown,
+  key: string,
+  sourceVersion: 1 | typeof CODEX_PET_SETTINGS_PRESET_VERSION,
+): CodexPetSettingsPreset {
+  const allowedKeys = [
+    'description',
+    'displayName',
+    'framingOffset',
+    'framingScale',
+    'globalMirrorX',
+    'lookMovementScale',
+    'mappings',
+    'source',
+    'updatedAt',
+    ...(sourceVersion === CODEX_PET_SETTINGS_PRESET_VERSION
+      ? ['schemaVersion']
+      : []),
+  ]
   if (
     !isRecord(value) ||
-    !hasOnlyKeys(value, [
-      'description',
-      'displayName',
-      'framingOffset',
-      'framingScale',
-      'globalMirrorX',
-      'lookMovementScale',
-      'mappings',
-      'source',
-      'updatedAt',
-    ])
+    !hasOnlyKeys(value, allowedKeys) ||
+    (sourceVersion === CODEX_PET_SETTINGS_PRESET_VERSION &&
+      (value.schemaVersion !== CODEX_PET_SETTINGS_PRESET_SCHEMA_VERSION ||
+        !Object.hasOwn(value, 'source')))
   ) {
     throw new TypeError('Invalid preset.')
   }
@@ -280,6 +281,7 @@ function parsePreset(value: unknown, key: string): CodexPetSettingsPreset {
       CODEX_PET_LOOK_MOVEMENT_SCALE_MAX,
     ),
     mappings: parseMappings(value.mappings),
+    schemaVersion: CODEX_PET_SETTINGS_PRESET_SCHEMA_VERSION,
     source:
       value.source === undefined || value.source === null
         ? null
@@ -293,13 +295,15 @@ function parsePreset(value: unknown, key: string): CodexPetSettingsPreset {
   }
 }
 
-export function parseCodexPetSettingsPresetCatalog(
+function parseVersionedPresetCatalog(
   value: unknown,
+  sourceVersion: 1 | typeof CODEX_PET_SETTINGS_PRESET_VERSION,
+  includePreset: (preset: CodexPetSettingsPreset) => boolean = () => true,
 ): CodexPetSettingsPresetCatalog {
   if (
     !isRecord(value) ||
     !hasOnlyKeys(value, ['activePresetName', 'presets', 'version']) ||
-    value.version !== CODEX_PET_SETTINGS_PRESET_VERSION ||
+    value.version !== sourceVersion ||
     !isRecord(value.presets) ||
     (value.activePresetName !== null &&
       typeof value.activePresetName !== 'string')
@@ -308,7 +312,14 @@ export function parseCodexPetSettingsPresetCatalog(
   }
 
   const entries = Object.entries(value.presets)
-    .map(([key, preset]) => [key, parsePreset(preset, key)] as const)
+    .flatMap(([key, value]) => {
+      try {
+        const preset = parsePreset(value, key, sourceVersion)
+        return includePreset(preset) ? [[key, preset] as const] : []
+      } catch {
+        return []
+      }
+    })
     .sort((left, right) => right[1].updatedAt - left[1].updatedAt)
     .slice(0, CODEX_PET_SETTINGS_PRESET_LIMIT)
   const presets = Object.fromEntries(entries)
@@ -316,12 +327,38 @@ export function parseCodexPetSettingsPresetCatalog(
 
   return {
     activePresetName:
-      activePresetName !== null && presets[activePresetName]
+      activePresetName !== null && Object.hasOwn(presets, activePresetName)
         ? activePresetName
         : null,
     presets,
     version: CODEX_PET_SETTINGS_PRESET_VERSION,
   }
+}
+
+export function parseCodexPetSettingsPresetCatalog(
+  value: unknown,
+): CodexPetSettingsPresetCatalog {
+  return parseVersionedPresetCatalog(
+    value,
+    CODEX_PET_SETTINGS_PRESET_VERSION,
+  )
+}
+
+function migrateVersionOnePresetCatalog(
+  value: unknown,
+  runtime: CodexPetSettingsPresetRuntime,
+  sourceScope: 'common' | 'runtime',
+): CodexPetSettingsPresetCatalog {
+  return parseVersionedPresetCatalog(
+    value,
+    1,
+    (preset) =>
+      sourceScope === 'runtime'
+        ? presetSourceBelongsToRuntime(preset.source, runtime)
+        : preset.source === null
+          ? runtime === 'prsk'
+          : presetSourceBelongsToRuntime(preset.source, runtime),
+  )
 }
 
 export function readCodexPetSettingsPresetCatalog(
@@ -335,44 +372,32 @@ export function readCodexPetSettingsPresetCatalog(
   const storageKey = CODEX_PET_SETTINGS_PRESET_STORAGE_KEYS[runtime]
   try {
     const stored = storage.getItem(storageKey)
-    if (stored === null) {
-      const legacyStored = storage.getItem(
-        CODEX_PET_SETTINGS_PRESET_LEGACY_STORAGE_KEY,
+    if (stored !== null) {
+      return parseVersionedPresetCatalog(
+        JSON.parse(stored),
+        CODEX_PET_SETTINGS_PRESET_VERSION,
+        (preset) => presetSourceBelongsToRuntime(preset.source, runtime),
       )
-      if (legacyStored === null) {
-        return createEmptyCatalog()
-      }
-      const legacyCatalog = parseCodexPetSettingsPresetCatalog(
-        JSON.parse(legacyStored),
-      )
-      const migratedPresets = Object.fromEntries(
-        Object.entries(legacyCatalog.presets).filter(([, preset]) =>
-          preset.source === null
-            ? runtime === 'prsk'
-            : presetSourceBelongsToRuntime(preset.source, runtime),
-        ),
-      )
-      const migrated: CodexPetSettingsPresetCatalog = {
-        activePresetName:
-          legacyCatalog.activePresetName &&
-          migratedPresets[legacyCatalog.activePresetName]
-            ? legacyCatalog.activePresetName
-            : null,
-        presets: migratedPresets,
-        version: CODEX_PET_SETTINGS_PRESET_VERSION,
-      }
-      writeCatalog(migrated, storage, runtime)
-      return migrated
     }
-    const parsed = parseCodexPetSettingsPresetCatalog(JSON.parse(stored))
-    if (
-      Object.values(parsed.presets).some(
-        (preset) => !presetSourceBelongsToRuntime(preset.source, runtime),
-      )
-    ) {
-      throw new TypeError('Preset source does not belong to this runtime.')
+
+    const runtimeLegacyStored = storage.getItem(
+      CODEX_PET_SETTINGS_PRESET_V1_STORAGE_KEYS[runtime],
+    )
+    const commonLegacyStored = runtimeLegacyStored === null
+      ? storage.getItem(CODEX_PET_SETTINGS_PRESET_LEGACY_STORAGE_KEY)
+      : null
+    const legacyStored = runtimeLegacyStored ?? commonLegacyStored
+    if (legacyStored === null) {
+      return createEmptyCatalog()
     }
-    return parsed
+
+    const migrated = migrateVersionOnePresetCatalog(
+      JSON.parse(legacyStored),
+      runtime,
+      runtimeLegacyStored === null ? 'common' : 'runtime',
+    )
+    writeCatalog(migrated, storage, runtime)
+    return migrated
   } catch {
     try {
       storage.removeItem(storageKey)
@@ -417,10 +442,12 @@ export function saveCodexPetSettingsPreset(
       mappings: Object.fromEntries(
         CODEX_PET_STATES.map(({ id }) => [id, { ...input.mappings[id] }]),
       ),
+      schemaVersion: CODEX_PET_SETTINGS_PRESET_SCHEMA_VERSION,
       source: input.source ?? null,
       updatedAt,
     },
     displayName,
+    CODEX_PET_SETTINGS_PRESET_VERSION,
   )
   if (!presetSourceBelongsToRuntime(preset.source, runtime)) {
     throw new TypeError('Preset source does not belong to this runtime.')
@@ -450,7 +477,7 @@ export function selectCodexPetSettingsPreset(
 ): CodexPetSettingsPresetCatalog {
   const current = readCodexPetSettingsPresetCatalog(storage, runtime)
   const activePresetName =
-    presetName !== null && current.presets[presetName]
+    presetName !== null && Object.hasOwn(current.presets, presetName)
       ? presetName
       : null
   const next = { ...current, activePresetName }

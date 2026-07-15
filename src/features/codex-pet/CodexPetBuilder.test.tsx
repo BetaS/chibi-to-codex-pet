@@ -14,6 +14,7 @@ import type { LiveSDFrameSamplingInput } from '../livesd/export/types'
 import { recommendCodexPetMappings } from './animationMapping'
 import { CodexPetBuilder, type CodexPetBuilderServices } from './CodexPetBuilder'
 import type { CodexPetManifest } from './manifest'
+import { decodeCodexPetRecipe } from './recipe'
 import {
   CODEX_PET_SETTINGS_PRESET_STORAGE_KEY,
   readCodexPetSettingsPresetCatalog,
@@ -547,7 +548,7 @@ describe('CodexPetBuilder', () => {
     )).toBeVisible()
   })
 
-  it('Garupa pinned 식별자는 preset에 저장하되 지원하지 않는 CLI 명령은 만들지 않는다', async () => {
+  it('Garupa pinned 식별자를 preset과 재현 가능한 CLI recipe에 함께 사용한다', async () => {
     const user = userEvent.setup()
     const { services } = createServices()
     render(
@@ -556,6 +557,10 @@ describe('CodexPetBuilder', () => {
         framingScale={1}
         presetRuntime="garupa"
         presetSource={{
+          provider: 'garupa-pinned',
+          sdAssetBundleName: '00001_2023',
+        }}
+        recipeSource={{
           provider: 'garupa-pinned',
           sdAssetBundleName: '00001_2023',
         }}
@@ -577,12 +582,22 @@ describe('CodexPetBuilder', () => {
       provider: 'garupa-pinned',
       sdAssetBundleName: '00001_2023',
     })
-    expect(screen.queryByRole('textbox', {
+    const installCommand = screen.getByRole('textbox', {
       name: 'npx 설치 명령',
-    })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', {
+    }) as HTMLTextAreaElement
+    expect(installCommand.value).toMatch(
+      /^npx -y chibi-to-codex-pet install --recipe /,
+    )
+    const encodedRecipe = installCommand.value.split('--recipe ')[1]
+    expect(encodedRecipe).toBeTruthy()
+    expect(decodeCodexPetRecipe(encodedRecipe as string).source).toEqual({
+      provider: 'garupa-pinned',
+      sdAssetBundleName: '00001_2023',
+    })
+    await user.click(screen.getByRole('button', {
       name: 'CLI 바로가기 복사',
-    })).not.toBeInTheDocument()
+    }))
+    expect(services.copyText).toHaveBeenCalledWith(installCommand.value)
   })
 
   it('preset dropdown으로 설정을 전환하고 새 세션에서 catalog를 보존한 채 reset한다', async () => {
@@ -806,20 +821,18 @@ describe('CodexPetBuilder', () => {
       name: '눈 이동량 슬라이더',
     })
     fireEvent.change(lookMovementSlider, { target: { value: '130' } })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Codex Pet 생성' }))
 
+    const starPrompt = await screen.findByRole('dialog', {
+      name: '만든 Pet이 마음에 드셨나요?',
+    })
     const download = await screen.findByRole('link', {
       name: 'Codex Pet ZIP 다운로드',
     })
     expect(download).toHaveAttribute('href', 'blob:test-package')
     expect(download).toHaveAttribute('download', 'test-pet.codex-pet.zip')
     expect(services.trackDownload).not.toHaveBeenCalled()
-    download.addEventListener('click', (event) => event.preventDefault())
-    fireEvent.click(download)
-    expect(services.trackDownload).toHaveBeenCalledTimes(1)
-    const starPrompt = screen.getByRole('dialog', {
-      name: '만든 Pet이 마음에 드셨나요?',
-    })
     expect(starPrompt).toHaveAttribute('aria-modal', 'true')
     const repositoryLink = within(starPrompt).getByRole('link', {
       name: 'GitHub에서 Star',
@@ -836,9 +849,15 @@ describe('CodexPetBuilder', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(download).toHaveFocus()
 
+    download.addEventListener('click', (event) => event.preventDefault())
+    fireEvent.click(download)
+    expect(services.trackDownload).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
     fireEvent.click(download)
     expect(services.trackDownload).toHaveBeenCalledTimes(2)
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
     expect(services.validatePackage).toHaveBeenCalledWith(packageBlob, {
       allowEdgeClipping: true,
     })
@@ -881,6 +900,16 @@ describe('CodexPetBuilder', () => {
       'Test Pet',
     )
     expect(lookMovementSlider).toHaveAttribute('aria-valuetext', '150%')
+
+    services.createObjectUrl
+      .mockReturnValueOnce('blob:test-package-2')
+      .mockReturnValueOnce('blob:test-spritesheet-2')
+    await user.click(screen.getByRole('button', { name: 'Codex Pet 생성' }))
+    await waitFor(() =>
+      expect(services.validatePackage).toHaveBeenCalledTimes(2),
+    )
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(services.trackDownload).toHaveBeenCalledTimes(2)
   })
 
   it('완료된 package를 X/Y offset 변경 시 폐기하고 편집 입력은 보존한다', async () => {
@@ -1065,6 +1094,7 @@ describe('CodexPetBuilder', () => {
       'value',
       String(120 / 131),
     )
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 
     finishSampling?.()
     expect(
@@ -1104,6 +1134,7 @@ describe('CodexPetBuilder', () => {
     await user.click(screen.getByRole('button', { name: '생성 취소' }))
     expect(screen.getByText('생성을 취소했습니다.')).toBeInTheDocument()
     expect(rejectSample).toBeDefined()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 
     rerender(
       <CodexPetBuilder
@@ -1144,6 +1175,7 @@ describe('CodexPetBuilder', () => {
     expect(
       screen.queryByRole('link', { name: 'Codex Pet ZIP 다운로드' }),
     ).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(
       localStorage.getItem(CODEX_PET_SETTINGS_PRESET_STORAGE_KEY),
     ).toBeNull()

@@ -226,6 +226,10 @@ describe('StrrIntegration', () => {
     )
     expect(catalogLoader).not.toHaveBeenCalled()
     expect(modelLoader).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: '새로 만들기' })).toBeEnabled()
+    expect(screen.queryByRole('button', {
+      name: '캐릭터 목록 불러오기',
+    })).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', {
       name: '프리셋 불러오기',
     }))
