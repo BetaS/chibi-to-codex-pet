@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { CODEX_PET_STATES } from './contract'
 import {
+  CODEX_PET_RECIPE_PROVIDERS,
   createCodexPetRecipe,
   decodeCodexPetRecipe,
   encodeCodexPetRecipe,
@@ -95,6 +96,35 @@ describe('Codex Pet recipe', () => {
       ...recipe,
       source: { ...recipe.source, editionId: '2020001' },
     })).toThrow(/character ID로 시작/)
+  })
+
+  it('Garupa pinned source는 안전한 bundle ID만 strict round-trip한다', () => {
+    const recipe = createCodexPetRecipe({
+      source: {
+        provider: 'garupa-pinned',
+        sdAssetBundleName: '00001_2023',
+      },
+      pet: { displayName: 'Kasumi' },
+      mappings: mappings(),
+    })
+
+    expect(CODEX_PET_RECIPE_PROVIDERS).toEqual([
+      'custom',
+      'garupa-pinned',
+      'prsk-chibi-viewer',
+      'strr-res-pak',
+    ])
+    expect(decodeCodexPetRecipe(encodeCodexPetRecipe(recipe)).source).toEqual({
+      provider: 'garupa-pinned',
+      sdAssetBundleName: '00001_2023',
+    })
+    expect(() => parseCodexPetRecipe({
+      ...recipe,
+      source: {
+        provider: 'garupa-pinned',
+        sdAssetBundleName: '../00001',
+      },
+    })).toThrow(/source\.sdAssetBundleName/)
   })
 
   it('binary payload inline을 거부한다', () => {

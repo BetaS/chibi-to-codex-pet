@@ -342,23 +342,23 @@ export function GarupaSourcePanel({
             <p>{t('garupa.livePackDescription')}</p>
           </div>
         </div>
-        <div className="remote-actions garupa-catalog-actions">
-          <button
-            className="primary-action primary-action--compact"
-            data-provider-capability="catalog-load"
-            disabled={
-              selectedPresetName !== null ||
-              catalogPhase === 'loading' ||
-              state.phase === 'loading'
-            }
-            onClick={() => void loadCharacterCatalog()}
-            type="button"
-          >
-            {catalogPhase === 'loading'
-              ? t('garupa.loadingCharacterList')
-              : t('garupa.loadCharacterList')}
-          </button>
-        </div>
+        {selectedPresetName === null ? (
+          <div className="remote-actions garupa-catalog-actions">
+            <button
+              className="primary-action primary-action--compact"
+              data-provider-capability="catalog-load"
+              disabled={
+                catalogPhase === 'loading' || state.phase === 'loading'
+              }
+              onClick={() => void loadCharacterCatalog()}
+              type="button"
+            >
+              {catalogPhase === 'loading'
+                ? t('garupa.loadingCharacterList')
+                : t('garupa.loadCharacterList')}
+            </button>
+          </div>
+        ) : null}
         <div className="garupa-selector-stack">
           <SearchableCombobox
             disabled={catalogPhase !== 'ready' || state.phase === 'loading'}

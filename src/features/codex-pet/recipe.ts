@@ -44,6 +44,7 @@ const PET_KEYS = [
   'framingScale',
   'lookMovementScale',
 ] as const
+const GARUPA_PROVIDER_KEYS = ['provider', 'sdAssetBundleName'] as const
 const PRSK_PROVIDER_KEYS = ['characterId', 'provider'] as const
 const STRR_PROVIDER_KEYS = ['characterId', 'editionId', 'provider'] as const
 const RECIPE_KEYS = [
@@ -56,10 +57,15 @@ const RECIPE_KEYS = [
   'source',
 ] as const
 
+export const CODEX_PET_RECIPE_PROVIDERS = Object.freeze([
+  'custom',
+  'garupa-pinned',
+  'prsk-chibi-viewer',
+  'strr-res-pak',
+] as const)
+
 export type CodexPetRecipeProvider =
-  | 'custom'
-  | 'prsk-chibi-viewer'
-  | 'strr-res-pak'
+  (typeof CODEX_PET_RECIPE_PROVIDERS)[number]
 
 export interface CodexPetRecipeCustomSource {
   readonly provider: 'custom'
@@ -72,6 +78,11 @@ export interface CodexPetRecipePrskChibiViewerSource {
   readonly characterId: string
 }
 
+export interface CodexPetRecipeGarupaPinnedSource {
+  readonly provider: 'garupa-pinned'
+  readonly sdAssetBundleName: string
+}
+
 export interface CodexPetRecipeStrrResPakSource {
   readonly provider: 'strr-res-pak'
   readonly characterId: string
@@ -80,6 +91,7 @@ export interface CodexPetRecipeStrrResPakSource {
 
 export type CodexPetRecipeSource =
   | CodexPetRecipeCustomSource
+  | CodexPetRecipeGarupaPinnedSource
   | CodexPetRecipePrskChibiViewerSource
   | CodexPetRecipeStrrResPakSource
 
@@ -249,7 +261,10 @@ function parseLookMovementScale(value: unknown): number {
   return Math.round(value * 100) / 100
 }
 
-function parseSourceId(value: unknown, field: 'characterId' | 'editionId'): string {
+function parseSourceId(
+  value: unknown,
+  field: 'characterId' | 'editionId' | 'sdAssetBundleName',
+): string {
   const sourceId = parseTrimmedString(value, `source.${field}`, 128)
   if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(sourceId)) {
     recipeError(`source.${field}는 안전한 원격 ID여야 합니다.`)
@@ -278,6 +293,16 @@ export function parseCodexPetRecipeSource(
       characterId: parseSourceId(source.characterId, 'characterId'),
     }
   }
+  if (provider === 'garupa-pinned') {
+    assertKnownKeys(source, GARUPA_PROVIDER_KEYS, 'source')
+    return {
+      provider,
+      sdAssetBundleName: parseSourceId(
+        source.sdAssetBundleName,
+        'sdAssetBundleName',
+      ),
+    }
+  }
   if (provider === 'strr-res-pak') {
     assertKnownKeys(source, STRR_PROVIDER_KEYS, 'source')
     const characterId = parseSourceId(source.characterId, 'characterId')
@@ -295,7 +320,7 @@ export function parseCodexPetRecipeSource(
     }
   }
   recipeError(
-    'source.provider는 custom, prsk-chibi-viewer 또는 strr-res-pak이어야 합니다.',
+    `source.provider는 ${CODEX_PET_RECIPE_PROVIDERS.join(', ')} 중 하나여야 합니다.`,
   )
 }
 

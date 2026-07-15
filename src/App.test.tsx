@@ -11,6 +11,12 @@ import { StrictMode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { App } from './App'
+import { GITHUB_REPOSITORY_URL } from './features/github'
+import {
+  getGameSourceGridColumnCount,
+  MAX_GAME_SOURCE_GRID_COLUMNS,
+  NEW_GAME_SUPPORT_ISSUE_URL,
+} from './features/gameSourceNavigation'
 import type { CodexPetAnimationMappings } from './features/codex-pet/animationMapping'
 import { CODEX_PET_STATES } from './features/codex-pet/contract'
 import {
@@ -290,6 +296,70 @@ afterEach(() => {
 })
 
 describe('App', () => {
+  it('provider를 최대 네 열로 배치하고 하단에서 새 게임 지원 issue를 연다', () => {
+    expect(getGameSourceGridColumnCount(0)).toBe(1)
+    expect(getGameSourceGridColumnCount(3)).toBe(3)
+    expect(getGameSourceGridColumnCount(4)).toBe(4)
+    expect(getGameSourceGridColumnCount(5)).toBe(
+      MAX_GAME_SOURCE_GRID_COLUMNS,
+    )
+
+    render(<App />)
+
+    const navigation = screen.getByRole('navigation', { name: '게임 선택' })
+    const tablist = within(navigation).getByRole('tablist', { name: '게임' })
+    const supportRequest = within(navigation).getByRole('link', {
+      name: '새 게임 지원요청 (새 탭에서 열림)',
+    })
+
+    expect(tablist.style.getPropertyValue('--game-source-columns')).toBe('3')
+    expect(within(tablist).getAllByRole('tab')).toHaveLength(3)
+    expect(within(tablist).queryByRole('link')).not.toBeInTheDocument()
+    expect(navigation.lastElementChild).toBe(supportRequest)
+    expect(supportRequest).toHaveTextContent('새 게임 지원요청')
+    expect(supportRequest).toHaveAttribute('href', NEW_GAME_SUPPORT_ISSUE_URL)
+    expect(supportRequest).toHaveAttribute('target', '_blank')
+    expect(supportRequest).toHaveAttribute('rel', 'noreferrer')
+
+    supportRequest.addEventListener('click', (event) => event.preventDefault(), {
+      once: true,
+    })
+    fireEvent.click(supportRequest)
+
+    expect(screen.getByRole('tab', { name: '프로세카' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+  })
+
+  it('상단 GitHub Star 링크를 network 요청 없이 항상 표시한다', () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(
+      new Error('unexpected mount-time network request'),
+    )
+
+    render(<App />)
+
+    const header = screen.getByRole('banner')
+    const starLink = within(header).getByRole('link', {
+      name: 'GitHub에서 Star (새 탭에서 열림)',
+    })
+    expect(starLink).toHaveTextContent('GitHub에서 Star')
+    expect(starLink).toHaveAttribute('href', GITHUB_REPOSITORY_URL)
+    expect(starLink).toHaveAttribute('target', '_blank')
+    expect(starLink).toHaveAttribute('rel', 'noreferrer')
+    expect(fetchSpy).not.toHaveBeenCalled()
+
+    starLink.addEventListener('click', (event) => event.preventDefault(), {
+      once: true,
+    })
+    fireEvent.click(starLink)
+    expect(screen.getByRole('tab', { name: '프로세카' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
   it('레뷰 스타라이트 탭에서 공통 preview와 Codex Pet builder를 활성화한다', async () => {
     const user = userEvent.setup()
     render(<App />)
@@ -450,7 +520,9 @@ describe('App', () => {
     expect(screen.getByRole('button', {
       name: '프리셋 불러오기',
     })).toBeEnabled()
-    expect(screen.getByRole('button', { name: '불러오기' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '새로 만들기' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: '불러오기' }))
+      .not.toBeInTheDocument()
 
     await user.click(screen.getByRole('tab', { name: '레뷰 스타라이트' }))
     expect(screen.getByTestId('strr-resource-preset-selector')).toHaveValue(
@@ -461,9 +533,10 @@ describe('App', () => {
     expect(screen.getByRole('button', {
       name: '프리셋 불러오기',
     })).toBeEnabled()
-    expect(screen.getByRole('button', {
+    expect(screen.getByRole('button', { name: '새로 만들기' })).toBeEnabled()
+    expect(screen.queryByRole('button', {
       name: '캐릭터 목록 불러오기',
-    })).toBeDisabled()
+    })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('tab', { name: 'BanG Dream!' }))
     expect(screen.getByTestId('garupa-resource-preset-selector')).toHaveValue(
@@ -474,17 +547,18 @@ describe('App', () => {
     expect(screen.getByRole('button', {
       name: '프리셋 불러오기',
     })).toBeEnabled()
-    expect(screen.getByRole('button', {
+    expect(screen.getByRole('button', { name: '새로 만들기' })).toBeEnabled()
+    expect(screen.queryByRole('button', {
       name: '캐릭터 목록 불러오기',
-    })).toBeDisabled()
+    })).not.toBeInTheDocument()
 
-    await user.selectOptions(
-      screen.getByTestId('garupa-resource-preset-selector'),
-      '',
-    )
+    await user.click(screen.getByRole('button', { name: '새로 만들기' }))
+    expect(screen.getByTestId('garupa-resource-preset-selector')).toHaveValue('')
     expect(screen.getByRole('button', {
       name: '프리셋 불러오기',
     })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: '새로 만들기' }))
+      .not.toBeInTheDocument()
     expect(screen.getByRole('button', {
       name: '캐릭터 목록 불러오기',
     })).toBeEnabled()
@@ -658,7 +732,9 @@ describe('App', () => {
     )
     expect(screen.getByText('아직 표시할 캐릭터가 없습니다.')).toBeVisible()
     expect(catalogSpy).not.toHaveBeenCalled()
-    expect(screen.getByRole('button', { name: '불러오기' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: '불러오기' }))
+      .not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '새로 만들기' })).toBeEnabled()
     expect(screen.getByRole('button', {
       name: '프리셋 불러오기',
     })).toBeEnabled()
@@ -702,7 +778,7 @@ describe('App', () => {
     expect(mikuSession.setMirrorX).toHaveBeenLastCalledWith(true)
   })
 
-  it('원격 preset 불러오기 중 새 세션을 선택하면 이전 요청을 취소한다', async () => {
+  it('원격 preset 불러오기 중 새로 만들기를 누르면 이전 요청을 취소한다', async () => {
     const user = userEvent.setup()
     const catalogDeferred = createDeferred<PrskRemoteCatalog>()
     const mappings = Object.fromEntries(
@@ -732,15 +808,13 @@ describe('App', () => {
 
     render(<App />)
     expect(catalogSpy).not.toHaveBeenCalled()
-    expect(screen.getByRole('button', { name: '불러오기' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: '불러오기' }))
+      .not.toBeInTheDocument()
     await user.click(screen.getByRole('button', {
       name: '프리셋 불러오기',
     }))
     await waitFor(() => expect(catalogSpy).toHaveBeenCalledOnce())
-    await user.selectOptions(
-      screen.getByRole('combobox', { name: '저장 프리셋' }),
-      '',
-    )
+    await user.click(screen.getByRole('button', { name: '새로 만들기' }))
     catalogDeferred.resolve(createRemoteCatalog())
 
     await waitFor(() =>
@@ -757,6 +831,8 @@ describe('App', () => {
     expect(screen.getByRole('button', {
       name: '프리셋 불러오기',
     })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: '새로 만들기' }))
+      .not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '불러오기' })).toBeEnabled()
   })
 

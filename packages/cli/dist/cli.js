@@ -2,7 +2,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import { access, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
-import { constants, realpathSync } from "node:fs";
+import { constants, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, extname, isAbsolute, join, normalize, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -169,6 +169,7 @@ var PET_KEYS = [
 	"framingScale",
 	"lookMovementScale"
 ];
+var GARUPA_PROVIDER_KEYS = ["provider", "sdAssetBundleName"];
 var PRSK_PROVIDER_KEYS = ["characterId", "provider"];
 var STRR_PROVIDER_KEYS = [
 	"characterId",
@@ -184,6 +185,12 @@ var RECIPE_KEYS = [
 	"schemaVersion",
 	"source"
 ];
+var CODEX_PET_RECIPE_PROVIDERS = Object.freeze([
+	"custom",
+	"garupa-pinned",
+	"prsk-chibi-viewer",
+	"strr-res-pak"
+]);
 var CodexPetRecipeError = class extends Error {
 	code = "RECIPE_INVALID";
 	constructor(message) {
@@ -265,6 +272,13 @@ function parseCodexPetRecipeSource(value) {
 			characterId: parseSourceId(source.characterId, "characterId")
 		};
 	}
+	if (provider === "garupa-pinned") {
+		assertKnownKeys(source, GARUPA_PROVIDER_KEYS, "source");
+		return {
+			provider,
+			sdAssetBundleName: parseSourceId(source.sdAssetBundleName, "sdAssetBundleName")
+		};
+	}
 	if (provider === "strr-res-pak") {
 		assertKnownKeys(source, STRR_PROVIDER_KEYS, "source");
 		const characterId = parseSourceId(source.characterId, "characterId");
@@ -277,7 +291,7 @@ function parseCodexPetRecipeSource(value) {
 			editionId
 		};
 	}
-	recipeError("source.provider는 custom, prsk-chibi-viewer 또는 strr-res-pak이어야 합니다.");
+	recipeError(`source.provider는 ${CODEX_PET_RECIPE_PROVIDERS.join(", ")} 중 하나여야 합니다.`);
 }
 function parsePet(value) {
 	const pet = assertRecord(value, "pet");
@@ -357,7 +371,12 @@ function isSafeCodexPetId(value) {
 }
 //#endregion
 //#region src/cli.ts
-var CLI_VERSION = "0.1.0";
+function readCliVersion() {
+	const metadata = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+	if (typeof metadata !== "object" || metadata === null || !("version" in metadata) || typeof metadata.version !== "string" || metadata.version.length === 0) throw new Error("CLI package metadata version is invalid.");
+	return metadata.version;
+}
+var CLI_VERSION = readCliVersion();
 var PACKAGE_NAME = "chibi-to-codex-pet";
 var BIN_NAME = "chibi-to-codex-pet";
 var RECIPE_URL_MAX_BYTES = 64 * 1024;

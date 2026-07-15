@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { describe, expect, it, vi } from 'vitest'
 
 import {
   main,
@@ -17,6 +18,9 @@ const PNG_SIGNATURE_BASE64 = Buffer.from([
   26,
   10,
 ]).toString('base64')
+const packageMetadata = JSON.parse(
+  readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
+) as { readonly version: string }
 
 function petJson(id: string): string {
   return JSON.stringify({
@@ -29,6 +33,17 @@ function petJson(id: string): string {
 }
 
 describe('CLI parser', () => {
+  it('--version은 package metadata 버전을 출력한다', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined)
+
+    try {
+      await expect(main(['--version'], {})).resolves.toBe(0)
+      expect(log).toHaveBeenCalledWith(packageMetadata.version)
+    } finally {
+      log.mockRestore()
+    }
+  })
+
   it('install --recipe 옵션을 해석한다', () => {
     expect(
       parseArgs([

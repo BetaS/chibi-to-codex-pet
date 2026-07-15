@@ -6,12 +6,16 @@ import {
   applyCodexPetSettingsPresetMappings,
   CODEX_PET_SETTINGS_PRESET_LIMIT,
   CODEX_PET_SETTINGS_PRESET_LEGACY_STORAGE_KEY,
+  CODEX_PET_SETTINGS_PRESET_SCHEMA_VERSION,
   CODEX_PET_SETTINGS_PRESET_STORAGE_KEY,
   CODEX_PET_SETTINGS_PRESET_STORAGE_KEYS,
+  CODEX_PET_SETTINGS_PRESET_V1_STORAGE_KEYS,
+  CODEX_PET_SETTINGS_PRESET_VERSION,
   readCodexPetSettingsPresetCatalog,
   saveCodexPetSettingsPreset,
   selectCodexPetSettingsPreset,
   type CodexPetSettingsPresetInput,
+  type CodexPetSettingsPreset,
   type CodexPetSettingsPresetStorage,
 } from './settingsPresets'
 
@@ -41,6 +45,14 @@ function presetInput(
   }
 }
 
+function versionOnePreset(
+  preset: CodexPetSettingsPreset,
+): Record<string, unknown> {
+  const legacy = JSON.parse(JSON.stringify(preset)) as Record<string, unknown>
+  delete legacy.schemaVersion
+  return legacy
+}
+
 describe('Codex Pet settings presets', () => {
   it('성공 설정만 versioned storage에 저장하고 같은 trim 이름을 덮어쓴다', () => {
     saveCodexPetSettingsPreset(presetInput('  Miku  '), localStorage, 10)
@@ -61,6 +73,7 @@ describe('Codex Pet settings presets', () => {
       framingScale: 1.25,
       globalMirrorX: true,
       lookMovementScale: 1.15,
+      schemaVersion: CODEX_PET_SETTINGS_PRESET_SCHEMA_VERSION,
       updatedAt: 20,
     })
 
@@ -70,7 +83,7 @@ describe('Codex Pet settings presets', () => {
     expect(raw).not.toContain('packageUrl')
   })
 
-  it('원격 source 식별자를 저장하고 legacy source 없는 preset은 유지한다', () => {
+  it('원격 source 식별자와 current preset schema version을 저장한다', () => {
     const saved = saveCodexPetSettingsPreset({
       ...presetInput('Miku'),
       source: {
@@ -83,18 +96,54 @@ describe('Codex Pet settings presets', () => {
       provider: 'prsk-chibi-viewer',
       characterId: 'sd_21miku_normal',
     })
-    const legacyDocument = JSON.parse(JSON.stringify(saved)) as {
-      presets: Record<string, Record<string, unknown>>
-    }
-    delete legacyDocument.presets.Miku?.source
+    expect(saved.presets.Miku.schemaVersion).toBe(
+      CODEX_PET_SETTINGS_PRESET_SCHEMA_VERSION,
+    )
+    expect(saved.version).toBe(CODEX_PET_SETTINGS_PRESET_VERSION)
+  })
+
+  it('runtime version 1 preset을 항목별로 v2에 이관하고 legacy는 변경하지 않는다', () => {
+    const saved = saveCodexPetSettingsPreset({
+      ...presetInput('Legacy Local'),
+      source: null,
+    }, localStorage, 10, 'garupa')
+    const legacyPreset = versionOnePreset(saved.presets['Legacy Local']!)
+    delete legacyPreset.source
+    const legacyRaw = JSON.stringify({
+      activePresetName: 'Legacy Local',
+      presets: {
+        'Legacy Local': legacyPreset,
+        Broken: {
+          ...legacyPreset,
+          displayName: 'Broken',
+          unsupportedField: true,
+        },
+      },
+      version: 1,
+    })
+    localStorage.removeItem(CODEX_PET_SETTINGS_PRESET_STORAGE_KEYS.garupa)
     localStorage.setItem(
-      CODEX_PET_SETTINGS_PRESET_STORAGE_KEY,
-      JSON.stringify(legacyDocument),
+      CODEX_PET_SETTINGS_PRESET_V1_STORAGE_KEYS.garupa,
+      legacyRaw,
     )
 
-    expect(
-      readCodexPetSettingsPresetCatalog(localStorage).presets.Miku?.source,
-    ).toBeNull()
+    const migrated = readCodexPetSettingsPresetCatalog(localStorage, 'garupa')
+
+    expect(migrated.activePresetName).toBe('Legacy Local')
+    expect(Object.keys(migrated.presets)).toEqual(['Legacy Local'])
+    expect(migrated.presets['Legacy Local']).toMatchObject({
+      schemaVersion: CODEX_PET_SETTINGS_PRESET_SCHEMA_VERSION,
+      source: null,
+    })
+    expect(localStorage.getItem(
+      CODEX_PET_SETTINGS_PRESET_V1_STORAGE_KEYS.garupa,
+    )).toBe(legacyRaw)
+    expect(JSON.parse(localStorage.getItem(
+      CODEX_PET_SETTINGS_PRESET_STORAGE_KEYS.garupa,
+    ) ?? '{}')).toMatchObject({
+      activePresetName: 'Legacy Local',
+      version: CODEX_PET_SETTINGS_PRESET_VERSION,
+    })
   })
 
   it('STRR preset의 캐릭터와 에디션 식별자를 함께 보존한다', () => {
@@ -148,7 +197,7 @@ describe('Codex Pet settings presets', () => {
     expect(readCodexPetSettingsPresetCatalog(localStorage, 'garupa')).toEqual({
       activePresetName: null,
       presets: {},
-      version: 1,
+      version: CODEX_PET_SETTINGS_PRESET_VERSION,
     })
   })
 
@@ -199,9 +248,9 @@ describe('Codex Pet settings presets', () => {
       JSON.stringify({
         activePresetName: 'Nana',
         presets: {
-          ...prsk.presets,
-          ...strr.presets,
-          ...garupa.presets,
+          Miku: versionOnePreset(prsk.presets.Miku!),
+          Nana: versionOnePreset(strr.presets.Nana!),
+          Kasumi: versionOnePreset(garupa.presets.Kasumi!),
         },
         version: 1,
       }),
@@ -255,20 +304,61 @@ describe('Codex Pet settings presets', () => {
     ).toBeNull()
   })
 
+  it('유효한 current catalog read는 storage를 쓰거나 legacy를 조회하지 않는다', () => {
+    saveCodexPetSettingsPreset(presetInput('Miku'), localStorage, 1)
+    const raw = localStorage.getItem(CODEX_PET_SETTINGS_PRESET_STORAGE_KEY)
+    const storage: CodexPetSettingsPresetStorage = {
+      getItem: vi.fn((key) =>
+        key === CODEX_PET_SETTINGS_PRESET_STORAGE_KEY ? raw : null,
+      ),
+      removeItem: vi.fn(),
+      setItem: vi.fn(),
+    }
+
+    const catalog = readCodexPetSettingsPresetCatalog(storage)
+
+    expect(catalog.activePresetName).toBe('Miku')
+    expect(storage.getItem).toHaveBeenCalledOnce()
+    expect(storage.getItem).toHaveBeenCalledWith(
+      CODEX_PET_SETTINGS_PRESET_STORAGE_KEY,
+    )
+    expect(storage.removeItem).not.toHaveBeenCalled()
+    expect(storage.setItem).not.toHaveBeenCalled()
+  })
+
   it('손상된 document를 제거하고 storage read/write 실패를 전파하지 않는다', () => {
+    const old = saveCodexPetSettingsPreset(
+      presetInput('Old Miku'),
+      localStorage,
+      1,
+    )
+    const legacyRaw = JSON.stringify({
+      activePresetName: 'Old Miku',
+      presets: {
+        'Old Miku': versionOnePreset(old.presets['Old Miku']!),
+      },
+      version: 1,
+    })
+    localStorage.setItem(
+      CODEX_PET_SETTINGS_PRESET_V1_STORAGE_KEYS.prsk,
+      legacyRaw,
+    )
     localStorage.setItem(CODEX_PET_SETTINGS_PRESET_STORAGE_KEY, '{broken')
     expect(readCodexPetSettingsPresetCatalog(localStorage)).toEqual({
       activePresetName: null,
       presets: {},
-      version: 1,
+      version: CODEX_PET_SETTINGS_PRESET_VERSION,
     })
     expect(
       localStorage.getItem(CODEX_PET_SETTINGS_PRESET_STORAGE_KEY),
     ).toBe(JSON.stringify({
       activePresetName: null,
       presets: {},
-      version: 1,
+      version: CODEX_PET_SETTINGS_PRESET_VERSION,
     }))
+    expect(localStorage.getItem(
+      CODEX_PET_SETTINGS_PRESET_V1_STORAGE_KEYS.prsk,
+    )).toBe(legacyRaw)
 
     const blocked: CodexPetSettingsPresetStorage = {
       getItem: vi.fn(() => {
@@ -291,7 +381,7 @@ describe('Codex Pet settings presets', () => {
     expect(selectCodexPetSettingsPreset('Miku', blocked)).toEqual({
       activePresetName: null,
       presets: {},
-      version: 1,
+      version: CODEX_PET_SETTINGS_PRESET_VERSION,
     })
   })
 
@@ -317,8 +407,50 @@ describe('Codex Pet settings presets', () => {
     expect(readCodexPetSettingsPresetCatalog(localStorage)).toEqual({
       activePresetName: null,
       presets: {},
-      version: 1,
+      version: CODEX_PET_SETTINGS_PRESET_VERSION,
     })
+  })
+
+  it('mixed current catalog에서 invalid·future preset만 숨기고 유효 preset을 보존한다', () => {
+    const first = saveCodexPetSettingsPreset(
+      presetInput('Miku'),
+      localStorage,
+      1,
+    )
+    const second = saveCodexPetSettingsPreset(
+      presetInput('Airi'),
+      localStorage,
+      2,
+    )
+    const rawDocument = {
+      ...second,
+      activePresetName: 'Airi',
+      presets: {
+        Miku: first.presets.Miku,
+        Airi: {
+          ...second.presets.Airi,
+          schemaVersion: 99,
+        },
+        Unknown: {
+          ...second.presets.Airi,
+          displayName: 'Unknown',
+          unsupportedField: true,
+        },
+      },
+    }
+    const raw = JSON.stringify(rawDocument)
+    localStorage.setItem(CODEX_PET_SETTINGS_PRESET_STORAGE_KEY, raw)
+
+    const parsed = readCodexPetSettingsPresetCatalog(localStorage)
+
+    expect(parsed.activePresetName).toBeNull()
+    expect(Object.keys(parsed.presets)).toEqual(['Miku'])
+    expect(parsed.presets.Miku?.schemaVersion).toBe(
+      CODEX_PET_SETTINGS_PRESET_SCHEMA_VERSION,
+    )
+    expect(localStorage.getItem(CODEX_PET_SETTINGS_PRESET_STORAGE_KEY)).toBe(
+      raw,
+    )
   })
 
   it('현재 source에 없는 저장 animation만 추천 mapping으로 fallback한다', () => {

@@ -1,9 +1,12 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { CODEX_PET_STATES } from './contract'
 import type { CodexPetAnimationMappings } from './animationMapping'
 import { createCodexPetRecipe } from './recipe'
-import { createCodexPetRecipeSamplingInput } from './recipeRenderer'
+import {
+  createCodexPetRecipeSamplingInput,
+  sampleCodexPetRecipeFrames,
+} from './recipeRenderer'
 
 describe('recipe renderer sampling parity', () => {
   it('recipe의 전체·상태별 반전을 그대로 공용 sampler에 전달한다', () => {
@@ -89,5 +92,76 @@ describe('recipe renderer sampling parity', () => {
       lookRigFallback: 'static',
       mappings,
     })
+  })
+
+  it('Garupa recipe만 Spine 4.0 sampler로 routing한다', async () => {
+    const mappings = Object.fromEntries(
+      CODEX_PET_STATES.map((state) => [
+        state.id,
+        { animationName: 'idle', mirrorX: false },
+      ]),
+    ) as CodexPetAnimationMappings
+    const model = {
+      atlasBundle: {
+        sourceName: '00001_2023-model',
+        atlasPath: 'costume.atlas',
+        atlasText: 'atlas',
+        atlasPages: new Map<string, Blob>(),
+      },
+      skeletonData: new ArrayBuffer(1),
+    }
+    const garupaSpine40Sample = vi.fn(async () => ({
+      adapterIdentity: 'official-spine-4.0',
+      atlasPng: new Blob(['garupa'], { type: 'image/png' }),
+      frameCount: 43,
+      height: 2288,
+      runtimeKey: 'spine-4.0' as const,
+      width: 1536,
+    }))
+    const liveSD36Sample = vi.fn(async () => ({
+      atlasPng: new Blob(['livesd36'], { type: 'image/png' }),
+      frameCount: 43,
+      height: 2288,
+      width: 1536,
+    }))
+    const services = {
+      garupaSpine40: { sample: garupaSpine40Sample },
+      liveSD36: { sample: liveSD36Sample },
+    }
+    const controller = new AbortController()
+
+    await sampleCodexPetRecipeFrames(
+      createCodexPetRecipe({
+        source: {
+          provider: 'garupa-pinned',
+          sdAssetBundleName: '00001_2023',
+        },
+        pet: { displayName: 'Kasumi' },
+        mappings,
+      }),
+      model,
+      controller.signal,
+      services,
+    )
+
+    expect(garupaSpine40Sample).toHaveBeenCalledOnce()
+    expect(liveSD36Sample).not.toHaveBeenCalled()
+
+    await sampleCodexPetRecipeFrames(
+      createCodexPetRecipe({
+        source: {
+          provider: 'prsk-chibi-viewer',
+          characterId: 'sd_test',
+        },
+        pet: { displayName: 'Miku' },
+        mappings,
+      }),
+      model,
+      controller.signal,
+      services,
+    )
+
+    expect(liveSD36Sample).toHaveBeenCalledOnce()
+    expect(garupaSpine40Sample).toHaveBeenCalledOnce()
   })
 })
