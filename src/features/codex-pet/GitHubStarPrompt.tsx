@@ -7,14 +7,14 @@ import {
 import { createPortal } from 'react-dom'
 
 import { useI18n } from '../../i18n'
+import { GITHUB_REPOSITORY_URL } from '../github'
 
-export const GITHUB_REPOSITORY_URL =
-  'https://github.com/BetaS/chibi-to-codex-pet'
+export { GITHUB_REPOSITORY_URL } from '../github'
 
 interface GitHubStarPromptProps {
   readonly isOpen: boolean
   readonly onClose: () => void
-  readonly triggerRef: RefObject<HTMLAnchorElement | null>
+  readonly returnFocusRef: RefObject<HTMLAnchorElement | null>
 }
 
 const FOCUSABLE_SELECTOR = [
@@ -26,7 +26,7 @@ const FOCUSABLE_SELECTOR = [
 export function GitHubStarPrompt({
   isOpen,
   onClose,
-  triggerRef,
+  returnFocusRef,
 }: GitHubStarPromptProps) {
   const { t } = useI18n()
   const dialogRef = useRef<HTMLDivElement>(null)
@@ -41,7 +41,7 @@ export function GitHubStarPrompt({
       document.activeElement instanceof HTMLElement
         ? document.activeElement
         : null
-    const triggerElement = triggerRef.current
+    const returnFocusElement = returnFocusRef.current
     const originalOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     repositoryLinkRef.current?.focus()
@@ -82,13 +82,13 @@ export function GitHubStarPrompt({
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
       document.body.style.overflow = originalOverflow
-      if (triggerElement?.isConnected) {
-        triggerElement.focus()
+      if (returnFocusElement?.isConnected) {
+        returnFocusElement.focus()
       } else if (previouslyFocused?.isConnected) {
         previouslyFocused.focus()
       }
     }
-  }, [isOpen, onClose, triggerRef])
+  }, [isOpen, onClose, returnFocusRef])
 
   if (!isOpen) {
     return null

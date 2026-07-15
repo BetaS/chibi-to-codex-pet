@@ -60,6 +60,15 @@ export function CodexPetPresetLoader({
         >
           {t('builder.loadPreset')}
         </button>
+        {selectedPresetName !== null ? (
+          <button
+            className="secondary-action"
+            onClick={() => onSelectionChange(null)}
+            type="button"
+          >
+            {t('builder.createNew')}
+          </button>
+        ) : null}
       </div>
     </section>
   )

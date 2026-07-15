@@ -753,30 +753,28 @@ export function StrrIntegration({
             selectorTestId="strr-resource-preset-selector"
           />
 
-          <section className="panel-section">
-            <div className="step-heading">
-              <span>01</span>
-              <div>
-                <h2>{t('strr.archiveMirror')}</h2>
-                <p>{t('strr.archiveMirrorDescription')}</p>
+          {presetSession.selectedPresetName === null ? (
+            <section className="panel-section">
+              <div className="step-heading">
+                <span>01</span>
+                <div>
+                  <h2>{t('strr.archiveMirror')}</h2>
+                  <p>{t('strr.archiveMirrorDescription')}</p>
+                </div>
               </div>
-            </div>
-            <button
-              className="primary-action"
-              data-provider-capability="catalog-load"
-              disabled={
-                presetSession.selectedPresetName !== null ||
-                catalogPhase === 'loading' ||
-                modelPhase === 'loading'
-              }
-              onClick={() => void loadCatalog()}
-              type="button"
-            >
-              {catalogPhase === 'loading'
-                ? t('strr.loadingCatalog')
-                : t('strr.loadCatalog')}
-            </button>
-          </section>
+              <button
+                className="primary-action"
+                data-provider-capability="catalog-load"
+                disabled={catalogPhase === 'loading' || modelPhase === 'loading'}
+                onClick={() => void loadCatalog()}
+                type="button"
+              >
+                {catalogPhase === 'loading'
+                  ? t('strr.loadingCatalog')
+                  : t('strr.loadCatalog')}
+              </button>
+            </section>
+          ) : null}
 
           <section className="panel-section strr-selector-stack">
             <div className="step-heading">

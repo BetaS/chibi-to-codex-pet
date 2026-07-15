@@ -311,13 +311,21 @@ const localeStorageKey = 'chibi-to-codex-pet.locale.v1'
 if (!bundledText.includes(localeStorageKey)) {
   throw new Error('Production build is missing the versioned locale storage key.')
 }
-const petPresetStorageKeys = [
+const writablePetPresetStorageKeys = [
+  'chibi-to-codex-pet.pet-presets.prsk.v2',
+  'chibi-to-codex-pet.pet-presets.strr.v2',
+  'chibi-to-codex-pet.pet-presets.garupa.v2',
+]
+const readOnlyLegacyPetPresetStorageKeys = [
   'chibi-to-codex-pet.pet-presets.prsk.v1',
   'chibi-to-codex-pet.pet-presets.strr.v1',
   'chibi-to-codex-pet.pet-presets.garupa.v1',
   'chibi-to-codex-pet.pet-presets.v1',
 ]
-for (const petPresetStorageKey of petPresetStorageKeys) {
+for (const petPresetStorageKey of [
+  ...writablePetPresetStorageKeys,
+  ...readOnlyLegacyPetPresetStorageKeys,
+]) {
   if (!bundledText.includes(petPresetStorageKey)) {
     throw new Error(
       `Production build is missing Pet preset storage key: ${petPresetStorageKey}`,

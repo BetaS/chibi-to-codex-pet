@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { access, lstat, mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
-import { constants as fsConstants, realpathSync } from 'node:fs'
+import { constants as fsConstants, readFileSync, realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, dirname, extname, isAbsolute, join, normalize, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -19,7 +19,23 @@ import {
   isSafeCodexPetId,
 } from '../../../src/features/codex-pet/manifest'
 
-const CLI_VERSION = '0.1.0'
+function readCliVersion(): string {
+  const metadata: unknown = JSON.parse(
+    readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
+  )
+  if (
+    typeof metadata !== 'object' ||
+    metadata === null ||
+    !('version' in metadata) ||
+    typeof metadata.version !== 'string' ||
+    metadata.version.length === 0
+  ) {
+    throw new Error('CLI package metadata version is invalid.')
+  }
+  return metadata.version
+}
+
+const CLI_VERSION = readCliVersion()
 const PACKAGE_NAME = 'chibi-to-codex-pet'
 const BIN_NAME = 'chibi-to-codex-pet'
 const RECIPE_URL_MAX_BYTES = 64 * 1024

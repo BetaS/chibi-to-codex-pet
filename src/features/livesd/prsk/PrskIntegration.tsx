@@ -93,9 +93,9 @@ interface PreviewViewModel {
   readonly version: string
 }
 
-type PrskRecipeSource = Exclude<
+type PrskRecipeSource = Extract<
   CodexPetRecipeSource,
-  { readonly provider: 'strr-res-pak' }
+  { readonly provider: 'custom' | 'prsk-chibi-viewer' }
 >
 
 function isPrskRecipeSource(
@@ -107,22 +107,20 @@ function isPrskRecipeSource(
   )
 }
 
-function recipeSourceKey(source: CodexPetRecipeSource | null | undefined): string {
+function recipeSourceKey(source: PrskRecipeSource | null | undefined): string {
   if (!source) {
     return ''
   }
   if (source.provider === 'custom') {
     return `${source.provider}:${source.assetBaseUrl}:${source.characterId}`
   }
-  return source.provider === 'strr-res-pak'
-    ? `${source.provider}:${source.characterId}:${source.editionId}`
-    : `${source.provider}:${source.characterId}`
+  return `${source.provider}:${source.characterId}`
 }
 
 export interface ActiveLiveSDSource {
   readonly atlasBundle: LiveSDAtlasBundle
   readonly defaultDisplayName?: string
-  readonly recipeSource?: CodexPetRecipeSource
+  readonly recipeSource?: PrskRecipeSource
   readonly skeletonData: ArrayBuffer
 }
 
@@ -741,7 +739,7 @@ export function PrskIntegration() {
         canvas,
         skeletonData: input.skeletonData,
       })
-      const recipeSource: CodexPetRecipeSource =
+      const recipeSource: PrskRecipeSource =
         resourceSource === 'provided'
           ? {
               provider: 'prsk-chibi-viewer',
@@ -1376,21 +1374,22 @@ export function PrskIntegration() {
                     <p>{t('prsk.providedManifestDescription')}</p>
                   </div>
                 )}
-                <div className="remote-actions">
-                  <button
-                    className="primary-action primary-action--compact"
-                    data-provider-capability="catalog-load"
-                    disabled={
-                      presetSession.selectedPresetName !== null ||
-                      catalogPhase === 'loading' ||
-                      (resourceSource === 'custom' && !remoteBaseUrl.trim())
-                    }
-                    onClick={() => void loadRemoteCatalog()}
-                    type="button"
-                  >
-                    {t('prsk.load')}
-                  </button>
-                </div>
+                {presetSession.selectedPresetName === null ? (
+                  <div className="remote-actions">
+                    <button
+                      className="primary-action primary-action--compact"
+                      data-provider-capability="catalog-load"
+                      disabled={
+                        catalogPhase === 'loading' ||
+                        (resourceSource === 'custom' && !remoteBaseUrl.trim())
+                      }
+                      onClick={() => void loadRemoteCatalog()}
+                      type="button"
+                    >
+                      {t('prsk.load')}
+                    </button>
+                  </div>
+                ) : null}
                 {catalogPhase === 'loading' ? (
                   <p className="input-hint" aria-live="polite">
                     {t('prsk.loadingResourceList')}

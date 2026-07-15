@@ -73,7 +73,7 @@ describe('Garupa PRSK-aligned workspace', () => {
       createPreview: vi.fn(async () => activePreview),
     })
 
-    render(
+    const { container } = render(
       <I18nProvider initialLocale="ko" storage={null}>
         <GarupaSourceIntegration controllerFactory={() => controller} />
       </I18nProvider>,
@@ -103,6 +103,9 @@ describe('Garupa PRSK-aligned workspace', () => {
       name: '전체 캐릭터 수평 반전',
     })).not.toBeChecked()
     expect(activePreview.setMirrorX).toHaveBeenCalledWith(false)
+    expect(container.querySelector(
+      '[data-provider-capability="pet-builder"]',
+    )).not.toHaveAttribute('data-provider-cli-recipe')
 
     fireEvent.change(screen.getByLabelText('Pet 크기 슬라이더'), {
       target: { value: '125' },
@@ -141,7 +144,7 @@ describe('Garupa PRSK-aligned workspace', () => {
       materializePinned: vi.fn(async (bundleName) => source(bundleName)),
     })
 
-    render(
+    const { container } = render(
       <I18nProvider initialLocale="ko" storage={null}>
         <GarupaSourceIntegration
           characterCatalogLoader={vi.fn(async () => catalog)}
@@ -168,6 +171,9 @@ describe('Garupa PRSK-aligned workspace', () => {
       name: '전체 캐릭터 수평 반전',
     })).not.toBeChecked()
     expect(activePreview.setMirrorX).toHaveBeenLastCalledWith(false)
+    expect(container.querySelector(
+      '[data-provider-capability="pet-builder"]',
+    )).toHaveAttribute('data-provider-cli-recipe', 'garupa-pinned')
   })
 
   it('saved pinned preset은 명시적 불러오기 전에는 요청하지 않고 bundle과 설정을 복원한다', async () => {
@@ -207,9 +213,10 @@ describe('Garupa PRSK-aligned workspace', () => {
     expect(screen.getByRole('button', {
       name: '프리셋 불러오기',
     })).toBeEnabled()
-    expect(screen.getByRole('button', {
+    expect(screen.getByRole('button', { name: '새로 만들기' })).toBeEnabled()
+    expect(screen.queryByRole('button', {
       name: '캐릭터 목록 불러오기',
-    })).toBeDisabled()
+    })).not.toBeInTheDocument()
     expect(materializePinned).not.toHaveBeenCalled()
 
     await user.click(screen.getByRole('button', {
@@ -240,7 +247,7 @@ describe('Garupa PRSK-aligned workspace', () => {
     expect(materializePinned).toHaveBeenCalledTimes(1)
   })
 
-  it('Garupa preset 복원 중 새 세션을 선택하면 pending model을 취소한다', async () => {
+  it('Garupa preset 복원 중 새로 만들기를 누르면 pending model을 취소한다', async () => {
     const user = userEvent.setup()
     saveCodexPetSettingsPreset({
       description: '',
@@ -284,10 +291,11 @@ describe('Garupa PRSK-aligned workspace', () => {
     }))
     await waitFor(() => expect(materializePinned).toHaveBeenCalledOnce())
 
-    await user.selectOptions(
-      screen.getByTestId('garupa-resource-preset-selector'),
-      '',
-    )
+    await user.click(screen.getByRole('button', { name: '새로 만들기' }))
+    expect(screen.getByTestId('garupa-resource-preset-selector')).toHaveValue('')
+    expect(screen.getByRole('button', {
+      name: '캐릭터 목록 불러오기',
+    })).toBeEnabled()
     expect(requestSignal?.aborted).toBe(true)
     expect(controller.getState().phase).toBe('idle')
 

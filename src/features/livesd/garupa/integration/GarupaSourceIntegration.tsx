@@ -561,7 +561,7 @@ export function GarupaSourceIntegration({
           presetLoadGeneration={presetSession.loadGeneration}
           presetRuntime="garupa"
           presetSource={currentPresetSource}
-          recipeSource={null}
+          recipeSource={currentPresetSource}
           services={services}
           source={builderSource}
           key={builderSessionGeneration}
