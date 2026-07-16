@@ -8,7 +8,7 @@ type GoogleTag = (...args: unknown[]) => void
 
 declare global {
   interface Window {
-    dataLayer?: unknown[][]
+    dataLayer?: IArguments[]
     gtag?: GoogleTag
   }
 }
@@ -22,8 +22,10 @@ function normalizeMeasurementId(
 
 function getOrCreateGoogleTag(): GoogleTag {
   window.dataLayer ??= []
-  window.gtag ??= (...args: unknown[]) => {
-    window.dataLayer?.push(args)
+  window.gtag ??= function googleTag() {
+    // Google tag commands must retain the native Arguments object shape.
+    // eslint-disable-next-line prefer-rest-params
+    window.dataLayer?.push(arguments)
   }
   return window.gtag
 }
