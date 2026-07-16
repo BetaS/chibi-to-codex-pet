@@ -40,9 +40,18 @@ describe('GA4 browser adapter', () => {
       'https://www.googletagmanager.com/gtag/js?id=G-ABC123DEF4',
     )
     expect(window.dataLayer).toHaveLength(2)
+    expect(Object.prototype.toString.call(window.dataLayer?.[0])).toBe(
+      '[object Arguments]',
+    )
+    expect(Object.prototype.toString.call(window.dataLayer?.[1])).toBe(
+      '[object Arguments]',
+    )
     expect(window.dataLayer?.[0]?.[0]).toBe('js')
     expect(window.dataLayer?.[0]?.[1]).toBeInstanceOf(Date)
-    expect(window.dataLayer?.[1]).toEqual(['config', 'G-ABC123DEF4'])
+    expect(Array.from(window.dataLayer?.[1] ?? [])).toEqual([
+      'config',
+      'G-ABC123DEF4',
+    ])
 
     expect(initializeGoogleAnalytics('G-ABC123DEF4')).toBe(true)
     expect(document.querySelectorAll('#google-analytics-gtag')).toHaveLength(1)
