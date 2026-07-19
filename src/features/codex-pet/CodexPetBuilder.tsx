@@ -11,7 +11,10 @@ import {
   useI18n,
   type MessageKey,
 } from '../../i18n'
-import { trackPetZipDownload } from '../../analytics/ga4'
+import {
+  trackButtonClick,
+  trackPetZipDownload,
+} from '../../analytics/ga4'
 import type { LiveSDAtlasBundle } from '../livesd/model'
 import {
   liveSD36FrameSampler,
@@ -668,6 +671,7 @@ function CodexPetBuilderContent({
   }
 
   const cancelExport = () => {
+    trackButtonClick('pet_generation_cancel', presetRuntime)
     generationRef.current += 1
     controllerRef.current?.abort()
     controllerRef.current = null
@@ -679,6 +683,8 @@ function CodexPetBuilderContent({
     if (!source || !mappings || !displayName.trim()) {
       return
     }
+
+    trackButtonClick('pet_generate', presetRuntime)
 
     controllerRef.current?.abort()
     clearResult()
@@ -840,6 +846,7 @@ function CodexPetBuilderContent({
     if (!result?.installCommand || installCommandCopyPhase === 'copying') {
       return
     }
+    trackButtonClick('install_command_copy', presetRuntime)
     setInstallCommandCopyPhase('copying')
     try {
       await resolvedServices.copyText(result.installCommand)
@@ -1011,11 +1018,12 @@ function CodexPetBuilderContent({
                     lookMovementScale ===
                       CODEX_PET_LOOK_MOVEMENT_SCALE_DEFAULT
                   }
-                  onClick={() =>
+                  onClick={() => {
+                    trackButtonClick('look_movement_reset', presetRuntime)
                     updateLookMovementScale(
                       CODEX_PET_LOOK_MOVEMENT_SCALE_DEFAULT,
                     )
-                  }
+                  }}
                   type="button"
                 >
                   {t('builder.reset100')}

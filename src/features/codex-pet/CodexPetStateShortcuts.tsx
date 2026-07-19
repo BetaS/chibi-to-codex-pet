@@ -1,3 +1,4 @@
+import { trackButtonClick } from '../../analytics/ga4'
 import { useI18n } from '../../i18n'
 import type { CodexPetAnimationMappings } from './animationMapping'
 import { CODEX_PET_STATES, type CodexPetStateId } from './contract'
@@ -63,6 +64,7 @@ export function CodexPetStateShortcuts({
               onClick={() => {
                 const mapping = mappings?.[state.id]
                 if (mapping) {
+                  trackButtonClick('state_preview', state.id)
                   onActivate(
                     mapping.animationName,
                     state.id,

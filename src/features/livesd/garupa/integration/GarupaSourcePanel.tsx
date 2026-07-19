@@ -7,6 +7,11 @@ import {
   type ChangeEvent,
 } from 'react'
 
+import {
+  trackButtonClick,
+  trackCharacterSelection,
+  trackModelSelection,
+} from '../../../../analytics/ga4'
 import { useI18n } from '../../../../i18n'
 import { CodexPetPresetLoader } from '../../../codex-pet/CodexPetPresetLoader'
 import type { CodexPetSettingsPresetCatalog } from '../../../codex-pet/settingsPresets'
@@ -217,6 +222,7 @@ export function GarupaSourcePanel({
 
   const loadLocalFile = () => {
     if (!localFile || state.phase === 'loading') return
+    trackButtonClick('garupa_local_load')
     setSelectedBundleName(null)
     setModelQueryResetKey((key) => key + 1)
     controller.selectLocal(localFile)
@@ -227,6 +233,7 @@ export function GarupaSourcePanel({
     if (selectedPresetName !== null) {
       return
     }
+    trackButtonClick('garupa_catalog_load')
     catalogRequestRef.current?.abort()
     const request = new AbortController()
     catalogRequestRef.current = request
@@ -292,6 +299,12 @@ export function GarupaSourcePanel({
   }
 
   const selectCharacter = (characterKey: string) => {
+    const selectedGroup = characterGroups.find(
+      (group) => group.key === characterKey,
+    )
+    const analyticsCharacterId = selectedGroup?.characterId?.toString() ??
+      selectedGroup?.kind ?? 'unmapped'
+    trackCharacterSelection('garupa', analyticsCharacterId, 'pinned')
     setSelectedCharacterKey(characterKey)
     setSelectedBundleName(null)
     setModelQueryResetKey((key) => key + 1)
@@ -299,6 +312,7 @@ export function GarupaSourcePanel({
   }
 
   const selectModel = (bundleName: string) => {
+    trackModelSelection('garupa', bundleName, 'pinned')
     setSelectedBundleName(bundleName)
     const selectedEntry = selectedCharacterGroup?.entries.find(
       (entry) => entry.bundleName === bundleName,

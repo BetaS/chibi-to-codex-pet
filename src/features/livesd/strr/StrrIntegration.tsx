@@ -9,6 +9,11 @@ import {
 
 import './strr.css'
 
+import {
+  trackButtonClick,
+  trackCharacterSelection,
+  trackModelSelection,
+} from '../../../analytics/ga4'
 import { useI18n } from '../../../i18n'
 import {
   resolveCodexPetMirrorX,
@@ -282,6 +287,7 @@ export function StrrIntegration({
     if (presetSession.selectedPresetName !== null) {
       return
     }
+    trackButtonClick('strr_catalog_load')
     catalogRequestRef.current?.abort()
     modelRequestRef.current?.abort()
     disposePreview()
@@ -333,6 +339,7 @@ export function StrrIntegration({
   }
 
   const selectCharacter = (characterId: string) => {
+    trackCharacterSelection('strr', characterId, 'pinned')
     modelRequestRef.current?.abort()
     modelGenerationRef.current += 1
     disposePreview()
@@ -448,6 +455,7 @@ export function StrrIntegration({
     const currentCatalog = catalog
     const characterId = selectedCharacterId
     if (!currentCatalog || !characterId) return
+    trackModelSelection('strr', editionId, 'pinned')
     await loadModelForSelection(currentCatalog, characterId, editionId)
   }
 

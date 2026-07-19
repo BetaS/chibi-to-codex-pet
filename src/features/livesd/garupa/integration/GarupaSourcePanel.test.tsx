@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider, LocaleSelector } from '../../../../i18n'
 import { readCodexPetSettingsPresetCatalog } from '../../../codex-pet/settingsPresets'
@@ -182,6 +182,10 @@ async function loadCatalogAndSelectKasumi(user: ReturnType<typeof userEvent.setu
   return screen.getByRole('combobox', { name: '모델' })
 }
 
+afterEach(() => {
+  delete window.gtag
+})
+
 describe('Garupa source panel lifecycle', () => {
   it('uses the live pack by default and keeps local ZIP loading in advanced controls', async () => {
     const user = userEvent.setup()
@@ -232,6 +236,8 @@ describe('Garupa source panel lifecycle', () => {
 
   it('filters models by character and loads each model immediately on selection', async () => {
     const user = userEvent.setup()
+    const googleTag = vi.fn()
+    window.gtag = googleTag
     const firstPreview = preview('00001')
     const secondPreview = preview('00001_2023')
     const materializePinned = vi.fn(async (bundleName: string) =>
@@ -283,6 +289,24 @@ describe('Garupa source panel lifecycle', () => {
     )
     expect(firstPreview.dispose).toHaveBeenCalledOnce()
     expect(secondPreview.dispose).not.toHaveBeenCalled()
+    expect(googleTag).toHaveBeenCalledWith(
+      'event',
+      'character_select',
+      {
+        character_id: '1',
+        game_id: 'garupa',
+        source_type: 'pinned',
+      },
+    )
+    expect(googleTag).toHaveBeenCalledWith(
+      'event',
+      'model_select',
+      {
+        game_id: 'garupa',
+        model_id: '00001_2023',
+        source_type: 'pinned',
+      },
+    )
   })
 
   it('groups characters under official band sections and searches section aliases', async () => {

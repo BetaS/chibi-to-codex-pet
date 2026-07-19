@@ -293,6 +293,7 @@ function mockPreview(
 
 afterEach(() => {
   vi.restoreAllMocks()
+  delete window.gtag
 })
 
 describe('App', () => {
@@ -392,6 +393,8 @@ describe('App', () => {
 
   it('BanG Dream 탭을 선택하면 Garupa source와 builder를 활성화한다', async () => {
     const user = userEvent.setup()
+    const googleTag = vi.fn()
+    window.gtag = googleTag
     render(<App />)
 
     const prskTab = screen.getByRole('tab', { name: '프로세카' })
@@ -399,6 +402,12 @@ describe('App', () => {
     expect(garupaTab).toBeEnabled()
 
     await user.click(garupaTab)
+
+    expect(googleTag).toHaveBeenCalledWith(
+      'event',
+      'game_select',
+      { game_id: 'garupa' },
+    )
 
     expect(prskTab).toHaveAttribute('aria-selected', 'false')
     expect(garupaTab).toHaveAttribute('aria-selected', 'true')

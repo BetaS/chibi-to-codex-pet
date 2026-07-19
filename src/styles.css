@@ -1772,9 +1772,8 @@ h1 {
 
 @media (min-width: 58.001rem) {
   .preview-panel {
-    width: min(100%, 48rem);
+    width: 100%;
     height: clamp(33rem, 58vh, 36rem);
-    justify-self: center;
   }
 
   .preview-stage,

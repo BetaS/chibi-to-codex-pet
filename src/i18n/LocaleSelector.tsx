@@ -1,3 +1,4 @@
+import { trackButtonClick } from '../analytics/ga4'
 import { useI18n } from './I18nContext'
 import { LOCALE_OPTIONS } from './localeOptions'
 
@@ -17,7 +18,10 @@ export function LocaleSelector() {
           className="locale-selector__option"
           key={option.locale}
           lang={option.locale}
-          onClick={() => setLocale(option.locale)}
+          onClick={() => {
+            trackButtonClick('locale_change', option.locale)
+            setLocale(option.locale)
+          }}
           title={option.nativeName}
           type="button"
         >

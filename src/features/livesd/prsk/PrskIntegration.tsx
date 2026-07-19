@@ -9,6 +9,11 @@ import {
 } from 'react'
 
 import {
+  trackButtonClick,
+  trackCharacterSelection,
+  trackModelSelection,
+} from '../../../analytics/ga4'
+import {
   localizeErrorNotice,
   useI18n,
   type MessageKey,
@@ -504,6 +509,7 @@ export function PrskIntegration() {
       return
     }
 
+    trackButtonClick('prsk_source_change', nextSource)
     abortRemoteRequests()
     catalogGenerationRef.current += 1
     modelGenerationRef.current += 1
@@ -547,6 +553,8 @@ export function PrskIntegration() {
     ) {
       return
     }
+
+    trackButtonClick('prsk_catalog_load')
 
     let provider
     try {
@@ -666,6 +674,11 @@ export function PrskIntegration() {
       return
     }
 
+    trackCharacterSelection(
+      'prsk',
+      resourceSource === 'provided' ? characterKey : 'custom',
+      resourceSource === 'provided' ? 'provided' : 'custom',
+    )
     modelRequestRef.current?.abort()
     modelRequestRef.current = null
     modelGenerationRef.current += 1
@@ -675,7 +688,7 @@ export function PrskIntegration() {
     setRemoteModelBusy(false)
     setModelQueryResetKey((key) => key + 1)
     setError(null)
-  }, [characterGroups, toNotice])
+  }, [characterGroups, resourceSource, toNotice])
 
   const loadRemoteModel = useCallback(async (modelId: string) => {
     const canvas = canvasRef.current
@@ -697,6 +710,11 @@ export function PrskIntegration() {
       return
     }
 
+    trackModelSelection(
+      'prsk',
+      resourceSource === 'provided' ? modelId : 'custom',
+      resourceSource === 'provided' ? 'provided' : 'custom',
+    )
     modelRequestRef.current?.abort()
     const controller = new AbortController()
     modelRequestRef.current = controller
@@ -1019,6 +1037,7 @@ export function PrskIntegration() {
       return
     }
 
+    trackButtonClick('prsk_local_preview')
     void importLocalPreview(archiveFile, skeletonFile)
   }
 
