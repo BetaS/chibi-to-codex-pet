@@ -1,8 +1,42 @@
 const GOOGLE_TAG_SCRIPT_ID = 'google-analytics-gtag'
 const GOOGLE_TAG_SCRIPT_URL = 'https://www.googletagmanager.com/gtag/js'
 const GA4_MEASUREMENT_ID_PATTERN = /^G-[A-Z0-9]+$/u
+const ANALYTICS_IDENTIFIER_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/u
 
+export const BUTTON_CLICK_EVENT = 'button_click'
+export const CHARACTER_SELECT_EVENT = 'character_select'
+export const GAME_SELECT_EVENT = 'game_select'
+export const MODEL_SELECT_EVENT = 'model_select'
 export const PET_ZIP_DOWNLOAD_EVENT = 'pet_zip_download'
+
+export type AnalyticsGameId = 'garupa' | 'prsk' | 'strr'
+export type AnalyticsSelectionSource =
+  | 'custom'
+  | 'local'
+  | 'pinned'
+  | 'provided'
+
+export type AnalyticsButtonId =
+  | 'framing_reset'
+  | 'garupa_catalog_load'
+  | 'garupa_local_load'
+  | 'github_repository_open'
+  | 'install_command_copy'
+  | 'locale_change'
+  | 'look_movement_reset'
+  | 'new_game_support_open'
+  | 'pet_generate'
+  | 'pet_generation_cancel'
+  | 'preset_load'
+  | 'preset_new'
+  | 'prsk_catalog_load'
+  | 'prsk_local_preview'
+  | 'prsk_source_change'
+  | 'star_prompt_close'
+  | 'star_prompt_dismiss'
+  | 'star_prompt_repository_open'
+  | 'state_preview'
+  | 'strr_catalog_load'
 
 type GoogleTag = (...args: unknown[]) => void
 
@@ -28,6 +62,29 @@ function getOrCreateGoogleTag(): GoogleTag {
     window.dataLayer?.push(arguments)
   }
   return window.gtag
+}
+
+function sendAnalyticsEvent(
+  eventName: string,
+  parameters?: Readonly<Record<string, string>>,
+): void {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    if (parameters) {
+      window.gtag?.('event', eventName, parameters)
+    } else {
+      window.gtag?.('event', eventName)
+    }
+  } catch {
+    // Analytics must never interrupt an app interaction.
+  }
+}
+
+function validAnalyticsIdentifier(value: string): boolean {
+  return ANALYTICS_IDENTIFIER_PATTERN.test(value)
 }
 
 export function initializeGoogleAnalytics(
@@ -60,13 +117,48 @@ export function initializeGoogleAnalytics(
 }
 
 export function trackPetZipDownload(): void {
-  if (typeof window === 'undefined') {
-    return
-  }
+  sendAnalyticsEvent(PET_ZIP_DOWNLOAD_EVENT)
+}
 
-  try {
-    window.gtag?.('event', PET_ZIP_DOWNLOAD_EVENT)
-  } catch {
-    // Analytics must never interrupt the browser's Blob download.
+export function trackButtonClick(
+  buttonId: AnalyticsButtonId,
+  buttonValue?: string,
+): void {
+  const parameters: Record<string, string> = { button_id: buttonId }
+  if (buttonValue && validAnalyticsIdentifier(buttonValue)) {
+    parameters.button_value = buttonValue
   }
+  sendAnalyticsEvent(BUTTON_CLICK_EVENT, parameters)
+}
+
+export function trackGameSelection(gameId: AnalyticsGameId): void {
+  sendAnalyticsEvent(GAME_SELECT_EVENT, { game_id: gameId })
+}
+
+export function trackCharacterSelection(
+  gameId: AnalyticsGameId,
+  characterId: string,
+  sourceType: AnalyticsSelectionSource,
+): void {
+  const safeCharacterId = sourceType === 'custom' ? 'custom' : characterId
+  if (!validAnalyticsIdentifier(safeCharacterId)) return
+  sendAnalyticsEvent(CHARACTER_SELECT_EVENT, {
+    character_id: safeCharacterId,
+    game_id: gameId,
+    source_type: sourceType,
+  })
+}
+
+export function trackModelSelection(
+  gameId: AnalyticsGameId,
+  modelId: string,
+  sourceType: AnalyticsSelectionSource,
+): void {
+  const safeModelId = sourceType === 'custom' ? 'custom' : modelId
+  if (!validAnalyticsIdentifier(safeModelId)) return
+  sendAnalyticsEvent(MODEL_SELECT_EVENT, {
+    game_id: gameId,
+    model_id: safeModelId,
+    source_type: sourceType,
+  })
 }

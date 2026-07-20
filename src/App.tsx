@@ -1,5 +1,9 @@
 import { useState, type CSSProperties } from 'react'
 
+import {
+  trackButtonClick,
+  trackGameSelection,
+} from './analytics/ga4'
 import { I18nProvider, LocaleSelector, useI18n } from './i18n'
 import {
   GAME_SOURCES,
@@ -38,6 +42,7 @@ export function AppContent() {
             aria-label={t('app.githubStarAccessible')}
             className="github-star-indicator"
             href={GITHUB_REPOSITORY_URL}
+            onClick={() => trackButtonClick('github_repository_open')}
             rel="noreferrer"
             target="_blank"
           >
@@ -68,6 +73,7 @@ export function AppContent() {
                 key={game.id}
                 onClick={() => {
                   if (available) {
+                    trackGameSelection(game.id)
                     setSelectedGameId(game.id)
                   }
                 }}
@@ -84,6 +90,7 @@ export function AppContent() {
           aria-label={t('app.newGameSupportAccessible')}
           className="game-source-tabs__support-request"
           href={NEW_GAME_SUPPORT_ISSUE_URL}
+          onClick={() => trackButtonClick('new_game_support_open')}
           rel="noreferrer"
           target="_blank"
         >

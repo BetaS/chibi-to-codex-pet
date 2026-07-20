@@ -26,6 +26,7 @@ export interface GarupaLocalizedCharacterNames {
 export type GarupaCharacterCatalogResolution =
   | 'ambiguous'
   | 'base'
+  | 'character-id'
   | 'exact'
   | 'unresolved'
 
@@ -59,6 +60,14 @@ interface CharacterCandidate {
   readonly characterId: number
   readonly characterType: string
   readonly names: GarupaLocalizedCharacterNames
+}
+
+interface CharacterCandidates {
+  readonly byBundleName: ReadonlyMap<
+    string,
+    readonly CharacterCandidate[]
+  >
+  readonly byCharacterId: ReadonlyMap<number, CharacterCandidate>
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -137,7 +146,7 @@ function addCandidate(
 
 function parseCharacterCandidates(
   bytes: Uint8Array,
-): ReadonlyMap<string, readonly CharacterCandidate[]> {
+): CharacterCandidates {
   let parsed: unknown
   try {
     parsed = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes))
@@ -148,7 +157,8 @@ function parseCharacterCandidates(
     invalidCatalog('Garupa character catalog root가 올바르지 않습니다.')
   }
 
-  const candidates = new Map<string, CharacterCandidate[]>()
+  const byBundleName = new Map<string, CharacterCandidate[]>()
+  const byCharacterId = new Map<number, CharacterCandidate>()
   let costumeRows = 0
   for (const [rawCharacterId, rawCharacter] of Object.entries(parsed)) {
     if (!/^[1-9][0-9]{0,8}$/u.test(rawCharacterId) || !isRecord(rawCharacter)) {
@@ -172,6 +182,7 @@ function parseCharacterCandidates(
       characterType: rawCharacter.characterType,
       names: parseNames(rawCharacter.characterName),
     })
+    byCharacterId.set(characterId, candidate)
     if (rawCharacter.seasonCostumeListMap === undefined) continue
     if (
       !isRecord(rawCharacter.seasonCostumeListMap) ||
@@ -198,12 +209,12 @@ function parseCharacterCandidates(
         ) {
           invalidCatalog('Garupa season costume identity가 올바르지 않습니다.')
         }
-        addCandidate(candidates, bundleName, candidate)
+        addCandidate(byBundleName, bundleName, candidate)
       }
     }
   }
 
-  return candidates
+  return Object.freeze({ byBundleName, byCharacterId })
 }
 
 function resolveCandidate(
@@ -253,7 +264,7 @@ export function parseGarupaPinnedCharacterCatalog(
   }
   const candidates = parseCharacterCandidates(characterBytes)
   const entries = availableBundleNames.map((bundleName) => {
-    const exactCandidates = candidates.get(bundleName)
+    const exactCandidates = candidates.byBundleName.get(bundleName)
     const exact = resolveCandidate(exactCandidates)
     if (exact) {
       return Object.freeze({
@@ -278,7 +289,9 @@ export function parseGarupaPinnedCharacterCatalog(
 
     const separator = bundleName.indexOf('_')
     const baseName = separator > 0 ? bundleName.slice(0, separator) : null
-    const baseCandidates = baseName ? candidates.get(baseName) : undefined
+    const baseCandidates = baseName
+      ? candidates.byBundleName.get(baseName)
+      : undefined
     const base = resolveCandidate(baseCandidates)
     if (base) {
       return Object.freeze({
@@ -298,6 +311,21 @@ export function parseGarupaPinnedCharacterCatalog(
         characterKind: ambiguousCandidateKind(baseCandidates),
         names: null,
         resolution: 'ambiguous' as const,
+      })
+    }
+
+    const characterIdPrefix = /^[0-9]{5}(?=_)/u.exec(bundleName)?.[0]
+    const prefixedCandidate = characterIdPrefix
+      ? candidates.byCharacterId.get(Number(characterIdPrefix))
+      : undefined
+    if (prefixedCandidate) {
+      return Object.freeze({
+        bandId: prefixedCandidate.bandId,
+        bundleName,
+        characterId: prefixedCandidate.characterId,
+        characterKind: candidateKind(prefixedCandidate),
+        names: prefixedCandidate.names,
+        resolution: 'character-id' as const,
       })
     }
     return Object.freeze({

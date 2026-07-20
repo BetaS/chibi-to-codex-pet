@@ -6,6 +6,7 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 
+import { trackButtonClick } from '../../analytics/ga4'
 import { useI18n } from '../../i18n'
 import { GITHUB_REPOSITORY_URL } from '../github'
 
@@ -117,7 +118,10 @@ export function GitHubStarPrompt({
         <button
           aria-label={t('starPrompt.closeLabel')}
           className="github-star-prompt__close"
-          onClick={onClose}
+          onClick={() => {
+            trackButtonClick('star_prompt_close')
+            onClose()
+          }}
           type="button"
         >
           <span aria-hidden="true">×</span>
@@ -130,7 +134,10 @@ export function GitHubStarPrompt({
           <a
             className="github-star-prompt__repository-link"
             href={GITHUB_REPOSITORY_URL}
-            onClick={onClose}
+            onClick={() => {
+              trackButtonClick('star_prompt_repository_open')
+              onClose()
+            }}
             ref={repositoryLinkRef}
             rel="noreferrer"
             target="_blank"
@@ -140,7 +147,10 @@ export function GitHubStarPrompt({
           </a>
           <button
             className="github-star-prompt__dismiss"
-            onClick={onClose}
+            onClick={() => {
+              trackButtonClick('star_prompt_dismiss')
+              onClose()
+            }}
             type="button"
           >
             {t('starPrompt.dismiss')}

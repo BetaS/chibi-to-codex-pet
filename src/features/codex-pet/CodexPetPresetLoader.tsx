@@ -1,3 +1,4 @@
+import { trackButtonClick } from '../../analytics/ga4'
 import { useI18n } from '../../i18n'
 import type { CodexPetSettingsPresetCatalog } from './settingsPresets'
 
@@ -55,7 +56,10 @@ export function CodexPetPresetLoader({
         <button
           className="primary-action primary-action--compact"
           disabled={busy || selectedPresetName === null}
-          onClick={onLoad}
+          onClick={() => {
+            trackButtonClick('preset_load')
+            onLoad()
+          }}
           type="button"
         >
           {t('builder.loadPreset')}
@@ -63,7 +67,10 @@ export function CodexPetPresetLoader({
         {selectedPresetName !== null ? (
           <button
             className="secondary-action"
-            onClick={() => onSelectionChange(null)}
+            onClick={() => {
+              trackButtonClick('preset_new')
+              onSelectionChange(null)
+            }}
             type="button"
           >
             {t('builder.createNew')}

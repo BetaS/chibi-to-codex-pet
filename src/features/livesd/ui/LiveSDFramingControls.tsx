@@ -1,3 +1,4 @@
+import { trackButtonClick } from '../../../analytics/ga4'
 import { useI18n } from '../../../i18n'
 import {
   LIVE_SD_FRAMING_OFFSET_DEFAULT,
@@ -117,7 +118,14 @@ export function LiveSDFramingControls({
           {t('common.pixelValue', { value: framingOffset.y })}
         </output>
       </div>
-      <button disabled={disabled || unchanged} onClick={onReset} type="button">
+      <button
+        disabled={disabled || unchanged}
+        onClick={() => {
+          trackButtonClick('framing_reset')
+          onReset()
+        }}
+        type="button"
+      >
         {t('common.resetFraming')}
       </button>
     </fieldset>

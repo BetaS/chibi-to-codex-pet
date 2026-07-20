@@ -78,6 +78,13 @@ function validCharacters() {
       'unique',
       2,
     ),
+    38: character(
+      38,
+      ['要 楽奈', 'Rana Kaname', '要 樂奈', '要 乐奈', null],
+      ['00038_2023', '00138'],
+      'unique',
+      45,
+    ),
     1001: character(
       1001,
       ['モブA', 'Mob A', 'Mob A', 'Mob A', '모브A'],
@@ -126,7 +133,9 @@ describe('Garupa pinned character catalog', () => {
         '01001',
         '01001_variant',
         '01002',
+        '00038_lottery2021',
         '09999',
+        '00099_lottery2021',
       ],
     )
     const byBundle = new Map(
@@ -181,11 +190,28 @@ describe('Garupa pinned character catalog', () => {
     expect(localizeGarupaCharacterName(byBundle.get('01002')!, 'ko')).toBe(
       '모브A',
     )
+    expect(byBundle.get('00038_lottery2021')).toMatchObject({
+      bandId: 45,
+      characterId: 38,
+      characterKind: 'unique',
+      resolution: 'character-id',
+    })
+    expect(
+      localizeGarupaCharacterName(
+        byBundle.get('00038_lottery2021')!,
+        'ko',
+      ),
+    ).toBe('Rana Kaname')
     expect(byBundle.get('09999')).toMatchObject({
       bandId: null,
       characterId: null,
       characterKind: 'unmapped',
       names: null,
+      resolution: 'unresolved',
+    })
+    expect(byBundle.get('00099_lottery2021')).toMatchObject({
+      characterId: null,
+      characterKind: 'unmapped',
       resolution: 'unresolved',
     })
     expect(Object.isFrozen(catalog.entries)).toBe(true)
